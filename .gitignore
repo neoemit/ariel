@@ -1,0 +1,31 @@
+# Gradle files
+.gradle/
+build/
+*.apk
+*.aar
+
+# Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+local.properties
+
+# Build outputs
+bin/
+gen/
+out/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Signing keys
+*.keystore
+*.jks
+
+# User-specific files
+gradle.properties
+
+# NDK
+.cxx/
