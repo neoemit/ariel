@@ -1,31 +1,36 @@
-# Gradle files
+# Android / Gradle
 .gradle/
-build/
+**/build/
 *.apk
 *.aar
+.cxx/
+captures/
 
-# Android Studio
+# IDE
 .idea/
 *.iml
 *.iws
 *.ipr
+
+# Local machine config
 local.properties
-
-# Build outputs
-bin/
-gen/
-out/
-
-# OS files
-.DS_Store
-Thumbs.db
+.env
+.env.*
 
 # Signing keys
 *.keystore
 *.jks
 
-# User-specific files
-gradle.properties
+# Python backend
+backend/.venv/
+backend/__pycache__/
+backend/**/*.pyc
+backend/data/
 
-# NDK
-.cxx/
+# Secrets
+app/google-services.json
+backend/secrets/
+
+# OS files
+.DS_Store
+Thumbs.db

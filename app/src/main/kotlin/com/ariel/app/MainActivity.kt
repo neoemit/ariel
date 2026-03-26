@@ -22,11 +22,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -138,7 +138,7 @@ fun ArielApp(viewModel: PanicViewModel = viewModel()) {
                 NavigationBarItem(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    icon = { Icon(Icons.Default.Phone, contentDescription = context.getString(R.string.nav_pairing)) },
+                    icon = { Icon(Icons.Default.Wifi, contentDescription = context.getString(R.string.nav_pairing)) },
                     label = { Text(context.getString(R.string.nav_pairing)) }
                 )
                 NavigationBarItem(
@@ -263,23 +263,34 @@ fun PanicScreen(viewModel: PanicViewModel) {
         } else {
             val ringBg = MaterialTheme.colorScheme.surfaceVariant
             val ringColor = MaterialTheme.colorScheme.error
-            Box(contentAlignment = Alignment.Center) {
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                val buttonDiameter = (maxWidth - 16.dp).coerceAtMost(360.dp)
+                val ringDiameter = (buttonDiameter + 14.dp).coerceAtMost(maxWidth)
+                val ringStroke = 8.dp
+                val iconSize = (buttonDiameter * 0.26f).coerceAtMost(52.dp)
+                val iconDistance = buttonDiameter * 0.30f
+
                 // Outer Progress Ring
-                Canvas(modifier = Modifier.size(300.dp)) {
-                    drawCircle(color = ringBg, style = Stroke(width = 16.dp.toPx()))
+                Canvas(modifier = Modifier.size(ringDiameter)) {
+                    drawCircle(color = ringBg, style = Stroke(width = ringStroke.toPx()))
                     drawArc(
                         color = ringColor,
                         startAngle = -90f,
                         sweepAngle = progress * 360f,
                         useCenter = false,
-                        style = Stroke(width = 16.dp.toPx())
+                        style = Stroke(width = ringStroke.toPx())
                     )
                 }
 
                 SegmentedPanicButton(
                     selectedEscalation = selectedEscalation,
+                    iconSize = iconSize,
+                    iconDistance = iconDistance,
                     modifier = Modifier
-                        .size(240.dp)
+                        .size(buttonDiameter)
                         .semantics { contentDescription = ctx.getString(R.string.a11y_hold_panic) },
                     onEscalationSelected = { escalationType ->
                         viewModel.setEscalationMode(escalationType)
@@ -297,6 +308,8 @@ fun PanicScreen(viewModel: PanicViewModel) {
 @OptIn(ExperimentalComposeUiApi::class)
 private fun SegmentedPanicButton(
     selectedEscalation: String,
+    iconSize: Dp,
+    iconDistance: Dp,
     modifier: Modifier = Modifier,
     onEscalationSelected: (String) -> Unit,
     onPressedChange: (Boolean) -> Unit
@@ -392,25 +405,28 @@ private fun SegmentedPanicButton(
             }
         }
 
-        SegmentIcon(angleDegrees = 210f, distance = 72.dp) {
+        SegmentIcon(angleDegrees = 210f, distance = iconDistance) {
             Icon(
                 imageVector = Icons.Default.LocalHospital,
                 contentDescription = LocalContext.current.getString(R.string.escalation_medical_desc),
-                tint = iconColor
+                tint = iconColor,
+                modifier = Modifier.size(iconSize)
             )
         }
-        SegmentIcon(angleDegrees = 90f, distance = 72.dp) {
+        SegmentIcon(angleDegrees = 90f, distance = iconDistance) {
             Icon(
                 imageVector = Icons.Default.Warning,
                 contentDescription = LocalContext.current.getString(R.string.escalation_generic_desc),
-                tint = iconColor
+                tint = iconColor,
+                modifier = Modifier.size(iconSize)
             )
         }
-        SegmentIcon(angleDegrees = 330f, distance = 72.dp) {
+        SegmentIcon(angleDegrees = 330f, distance = iconDistance) {
             Icon(
                 painter = painterResource(R.drawable.ic_gun),
                 contentDescription = LocalContext.current.getString(R.string.escalation_armed_desc),
-                tint = iconColor
+                tint = iconColor,
+                modifier = Modifier.size(iconSize)
             )
         }
     }
