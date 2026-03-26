@@ -42,6 +42,11 @@ class AckRequest(BaseModel):
     eventId: str = Field(..., min_length=1, max_length=128)
 
 
+class PresenceRequest(BaseModel):
+    buddyIds: List[str] = Field(default_factory=list)
+    staleAfterSeconds: int = Field(default=180, ge=30, le=3600)
+
+
 def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -130,6 +135,36 @@ def get_tokens_for_buddies(buddy_ids: Sequence[str]) -> Dict[str, List[str]]:
     return tokens_by_buddy
 
 
+def get_presence_for_buddies(
+    buddy_ids: Sequence[str],
+    online_within_seconds: int,
+) -> Dict[str, int]:
+    if not buddy_ids:
+        return {}
+
+    placeholders = ",".join("?" for _ in buddy_ids)
+    sql = f"""
+        SELECT buddy_id, MAX(updated_at) AS last_seen
+        FROM devices
+        WHERE buddy_id IN ({placeholders})
+        GROUP BY buddy_id
+    """
+    with get_connection() as conn:
+        rows = conn.execute(sql, tuple(buddy_ids)).fetchall()
+
+    now = int(time.time())
+    threshold = now - max(online_within_seconds, 30)
+
+    presence: Dict[str, int] = {}
+    for row in rows:
+        buddy_id = str(row["buddy_id"])
+        last_seen = int(row["last_seen"])
+        if last_seen >= threshold:
+            presence[buddy_id] = last_seen
+
+    return presence
+
+
 def send_data_message(token: str, data: Dict[str, str]) -> bool:
     try:
         messaging.send(
@@ -169,6 +204,21 @@ def health() -> Dict[str, str | bool]:
 def register_device(request: RegisterDeviceRequest) -> Dict[str, str]:
     upsert_device(request)
     return {"status": "registered"}
+
+
+@app.post("/v1/presence")
+def get_presence(request: PresenceRequest) -> Dict[str, int | str | List[str] | Dict[str, int]]:
+    buddy_ids = sorted({buddy_id for buddy_id in request.buddyIds if buddy_id})
+    presence = get_presence_for_buddies(buddy_ids, request.staleAfterSeconds)
+
+    return {
+        "status": "ok",
+        "linkedCount": len(buddy_ids),
+        "onlineCount": len(presence),
+        "onlineBuddyIds": sorted(presence.keys()),
+        "lastSeen": presence,
+        "staleAfterSeconds": request.staleAfterSeconds,
+    }
 
 
 @app.post("/v1/panic")

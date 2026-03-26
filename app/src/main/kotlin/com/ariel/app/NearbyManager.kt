@@ -36,6 +36,7 @@ class NearbyManager(private val context: Context, val myName: String) {
 
     private val trustedFriends = mutableSetOf<String>()
     private val nameToEndpoint = mutableMapOf<String, String>()
+    private val endpointToName = mutableMapOf<String, String>()
 
     var onPanicReceived: ((senderName: String, escalationType: String, eventId: String) -> Unit)? = null
     var onAcknowledgeReceived: ((acknowledgerName: String) -> Unit)? = null
@@ -66,9 +67,11 @@ class NearbyManager(private val context: Context, val myName: String) {
                 message.startsWith("PAIR:") -> {
                     val name = message.removePrefix("PAIR:")
                     nameToEndpoint[name] = endpointId
+                    endpointToName[endpointId] = name
                     Log.d(tag, "PAIR received: $name -> $endpointId")
                     toast("Paired with $name")
                     onPairingReceived?.invoke(name)
+                    notifyPeerCount()
                 }
                 message == "PING" -> {
                     connectionsClient.sendPayload(endpointId, Payload.fromBytes("PONG".toByteArray()))
@@ -108,8 +111,12 @@ class NearbyManager(private val context: Context, val myName: String) {
 
         override fun onDisconnected(endpointId: String) {
             _peers.value -= endpointId
-            val disconnectedName = nameToEndpoint.entries.find { it.value == endpointId }?.key
-            nameToEndpoint.entries.removeAll { it.value == endpointId }
+            val disconnectedName = endpointToName.remove(endpointId)
+            if (disconnectedName != null) {
+                nameToEndpoint.remove(disconnectedName)
+            } else {
+                nameToEndpoint.entries.removeAll { it.value == endpointId }
+            }
             notifyPeerCount()
             Log.d(tag, "Disconnected from $endpointId ($disconnectedName). Will try to reconnect.")
             notifyStatus("Disconnected from $disconnectedName")
@@ -276,6 +283,7 @@ class NearbyManager(private val context: Context, val myName: String) {
     fun clearFriends() {
         trustedFriends.clear()
         nameToEndpoint.clear()
+        endpointToName.clear()
         connectionsClient.stopAllEndpoints()
         _peers.value = emptySet()
         notifyPeerCount()
@@ -308,9 +316,11 @@ class NearbyManager(private val context: Context, val myName: String) {
 
     private fun notifyPeerCount() {
         val count = _peers.value.size
-        Log.d(tag, "Notifying peer count change: $count")
+        val connectedPeerIds = ArrayList(nameToEndpoint.keys)
+        Log.d(tag, "Notifying peer count change: count=$count peers=$connectedPeerIds")
         val intent = Intent("com.ariel.app.PEER_COUNT_CHANGED").apply {
             putExtra("COUNT", count)
+            putStringArrayListExtra("PEER_IDS", connectedPeerIds)
             setPackage(context.packageName)
         }
         context.sendBroadcast(intent)

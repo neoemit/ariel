@@ -19,8 +19,11 @@ import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -30,6 +33,7 @@ class SirenService : Service() {
     private val monitorChannelId = "MonitorChannel"
     private val notificationId = 1001
     private val monitorNotificationId = 1002
+    private val relayHeartbeatIntervalMs = 60_000L
 
     private var nearbyManager: NearbyManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -38,6 +42,7 @@ class SirenService : Service() {
     private val handledEventIds = LinkedHashSet<String>()
     private val handledAckIds = LinkedHashSet<String>()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var relayHeartbeatJob: Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
@@ -154,6 +159,7 @@ class SirenService : Service() {
 
         showMonitorNotification()
         syncPushRegistration()
+        startRelayHeartbeat()
     }
 
     private fun getOrCreateMyName(prefs: android.content.SharedPreferences): String {
@@ -184,6 +190,17 @@ class SirenService : Service() {
                 }
         }.onFailure { error ->
             Log.w("ArielService", "Firebase Messaging unavailable: ${error.message}")
+        }
+    }
+
+    private fun startRelayHeartbeat() {
+        if (relayHeartbeatJob?.isActive == true) return
+
+        relayHeartbeatJob = serviceScope.launch {
+            while (isActive) {
+                syncPushRegistration()
+                delay(relayHeartbeatIntervalMs)
+            }
         }
     }
 
@@ -460,6 +477,8 @@ class SirenService : Service() {
             if (it.isHeld) it.release()
         }
         wakeLock = null
+        relayHeartbeatJob?.cancel()
+        relayHeartbeatJob = null
         serviceScope.cancel()
     }
 

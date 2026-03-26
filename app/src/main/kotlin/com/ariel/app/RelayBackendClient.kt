@@ -33,6 +33,45 @@ object RelayBackendClient {
         }
     }
 
+    suspend fun fetchPresence(
+        context: Context,
+        buddyIds: Collection<String>,
+        staleAfterSeconds: Int = 180,
+    ): Set<String> {
+        val normalizedBuddyIds = buddyIds
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+        if (normalizedBuddyIds.isEmpty()) return emptySet()
+
+        val response = postJsonForResponse(
+            context = context,
+            endpoint = "/v1/presence",
+            body = JSONObject().apply {
+                put("buddyIds", JSONArray(normalizedBuddyIds))
+                put("staleAfterSeconds", staleAfterSeconds.coerceIn(30, 3600))
+            }
+        )
+
+        if (response == null || response.first !in 200..299) return emptySet()
+
+        return runCatching {
+            val payload = JSONObject(response.second)
+            val online = payload.optJSONArray("onlineBuddyIds") ?: JSONArray()
+            val onlineIds = mutableSetOf<String>()
+            for (index in 0 until online.length()) {
+                val buddyId = online.optString(index).orEmpty().trim()
+                if (buddyId.isNotBlank()) {
+                    onlineIds.add(buddyId)
+                }
+            }
+            onlineIds
+        }.getOrElse {
+            Log.w(TAG, "Failed to parse presence response: ${it.message}")
+            emptySet()
+        }
+    }
+
     suspend fun registerDevice(context: Context, buddyId: String, token: String) {
         if (buddyId.isBlank() || token.isBlank()) return
         val appVersion = runCatching {
@@ -95,10 +134,21 @@ object RelayBackendClient {
     }
 
     private suspend fun postJson(context: Context, endpoint: String, body: JSONObject) {
-        val baseUrl = getBackendUrl(context) ?: return
+        val response = postJsonForResponse(context, endpoint, body) ?: return
+        if (response.first !in 200..299) {
+            Log.w(TAG, "Relay request failed (${response.first}) endpoint=$endpoint body=${response.second}")
+        }
+    }
+
+    private suspend fun postJsonForResponse(
+        context: Context,
+        endpoint: String,
+        body: JSONObject,
+    ): Pair<Int, String>? {
+        val baseUrl = getBackendUrl(context) ?: return null
         val url = URL("$baseUrl$endpoint")
 
-        withContext(Dispatchers.IO) {
+        return withContext(Dispatchers.IO) {
             val connection = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = CONNECT_TIMEOUT_MS
@@ -112,17 +162,17 @@ object RelayBackendClient {
                 connection.outputStream.use { output ->
                     output.write(body.toString().toByteArray(Charsets.UTF_8))
                 }
+
                 val responseCode = connection.responseCode
-                if (responseCode !in 200..299) {
-                    val response = runCatching {
-                        connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                    }.getOrDefault("")
-                    Log.w(TAG, "Relay request failed ($responseCode) endpoint=$endpoint body=$response")
-                } else {
-                    Unit
-                }
+                val bodyText = runCatching {
+                    val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
+                    stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                }.getOrDefault("")
+
+                responseCode to bodyText
             } catch (error: Exception) {
                 Log.w(TAG, "Relay request error for endpoint=$endpoint: ${error.message}")
+                null
             } finally {
                 connection.disconnect()
             }

@@ -41,6 +41,10 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     private val _peerCount = MutableStateFlow(0)
     val peerCount = _peerCount.asStateFlow()
 
+    private val nearbyPeerIds = MutableStateFlow<Set<String>>(emptySet())
+    private val nearbyEndpointCount = MutableStateFlow(0)
+    private val relayOnlinePeerIds = MutableStateFlow<Set<String>>(emptySet())
+
     private val _panicRingtoneUri = MutableStateFlow<String?>(null)
     val panicRingtoneUri = _panicRingtoneUri.asStateFlow()
 
@@ -69,6 +73,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             action = "START_MONITORING"
         })
 
+        startRelayPresencePolling()
+
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
                 when (intent?.action) {
@@ -95,8 +101,16 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
 
                     "com.ariel.app.PEER_COUNT_CHANGED" -> {
                         val count = intent.getIntExtra("COUNT", 0)
-                        Log.d("PanicVM", "Peer count update: $count")
-                        _peerCount.value = count
+                        val peers = intent.getStringArrayListExtra("PEER_IDS")
+                            ?.map { it.trim() }
+                            ?.filter { it.isNotBlank() }
+                            ?.toSet()
+                            ?: emptySet()
+
+                        Log.d("PanicVM", "Nearby peer update: count=$count peers=$peers")
+                        nearbyEndpointCount.value = count
+                        nearbyPeerIds.value = peers
+                        updateCombinedPeerCount()
                     }
 
                     "com.ariel.app.STATUS_UPDATE" -> {
@@ -154,6 +168,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
                 action = "ADD_FRIEND"
                 putExtra("FRIEND_NAME", name)
             })
+            viewModelScope.launch { refreshRelayPresence() }
         }
     }
 
@@ -174,6 +189,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
                 action = "REMOVE_FRIEND"
                 putExtra("FRIEND_NAME", name)
             })
+            viewModelScope.launch { refreshRelayPresence() }
         }
     }
 
@@ -195,6 +211,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         context.startService(Intent(context, SirenService::class.java).apply {
             action = "SYNC_PUSH_REGISTRATION"
         })
+        viewModelScope.launch { refreshRelayPresence() }
     }
 
     fun handlePress(isPressed: Boolean) {
@@ -251,6 +268,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putStringSet("friends", emptySet()).apply()
         _friends.value = emptyList()
         _nicknames.value = emptyMap()
+        relayOnlinePeerIds.value = emptySet()
+        updateCombinedPeerCount()
         context.startService(Intent(context, SirenService::class.java).apply {
             action = "CLEAR_POOL"
         })
@@ -274,10 +293,48 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             prefs.getString("nickname_$id", null)?.let { currentNicknames[id] = it }
         }
         _nicknames.value = currentNicknames
+
+        viewModelScope.launch {
+            refreshRelayPresence()
+        }
+    }
+
+    private fun startRelayPresencePolling() {
+        viewModelScope.launch {
+            while (true) {
+                refreshRelayPresence()
+                delay(PRESENCE_POLL_INTERVAL_MS)
+            }
+        }
+    }
+
+    private suspend fun refreshRelayPresence() {
+        val friendsSnapshot = _friends.value.filter { it.isNotBlank() }
+        if (friendsSnapshot.isEmpty() || RelayBackendClient.getBackendUrl(context).isNullOrBlank()) {
+            relayOnlinePeerIds.value = emptySet()
+            updateCombinedPeerCount()
+            return
+        }
+
+        runCatching {
+            RelayBackendClient.fetchPresence(context, friendsSnapshot)
+        }.onSuccess { onlineIds ->
+            relayOnlinePeerIds.value = onlineIds.filter { friendsSnapshot.contains(it) }.toSet()
+            updateCombinedPeerCount()
+        }.onFailure { error ->
+            Log.w("PanicVM", "Relay presence refresh failed: ${error.message}")
+            updateCombinedPeerCount()
+        }
+    }
+
+    private fun updateCombinedPeerCount() {
+        val byIds = (nearbyPeerIds.value + relayOnlinePeerIds.value).size
+        _peerCount.value = maxOf(byIds, nearbyEndpointCount.value)
     }
 
     companion object {
         const val PANIC_HOLD_DURATION_MS = 1_500L
+        const val PRESENCE_POLL_INTERVAL_MS = 30_000L
         const val ESCALATION_GENERIC = "GENERIC"
         const val ESCALATION_MEDICAL = "MEDICAL"
         const val ESCALATION_ARMED = "ARMED"

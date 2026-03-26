@@ -6,6 +6,8 @@ This service relays panic and acknowledgment events over Firebase Cloud Messagin
 - `GET /health`
 - `POST /v1/register-device`
   - `{ "buddyId": "User_1234", "token": "<fcm-token>", "appVersion": "1.5" }`
+- `POST /v1/presence`
+  - `{ "buddyIds": ["User_5678"], "staleAfterSeconds": 180 }`
 - `POST /v1/panic`
   - `{ "senderId": "User_1234", "eventId": "<uuid>", "escalationType": "GENERIC|MEDICAL|ARMED", "recipientIds": ["User_5678"] }`
 - `POST /v1/ack`
