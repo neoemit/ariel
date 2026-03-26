@@ -66,9 +66,9 @@ Use this when buddies are out of Nearby range and internet/mobile data is availa
    ```
 5. Check health:
    ```bash
-   curl http://localhost:8080/health
+   curl http://localhost:8001/health
    ```
-6. In the app **Settings** screen, set **Relay Backend URL** to your reachable host (for example `http://192.168.1.20:8080`).
+6. In the app **Settings** screen, set **Relay Backend URL** to your reachable host (for example `http://192.168.1.20:8001`).
 
 Android client Firebase setup (required for push token registration):
 1. Add these keys to `local.properties`:

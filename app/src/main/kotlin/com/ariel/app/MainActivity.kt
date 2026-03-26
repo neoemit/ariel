@@ -38,7 +38,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import android.content.Context
@@ -49,7 +48,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.toSp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import androidx.core.view.WindowCompat
@@ -315,11 +313,15 @@ private fun SegmentedPanicButton(
 ) {
     var buttonSize by remember { mutableStateOf(IntSize.Zero) }
     var trackingTouch by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     val selectedColor = MaterialTheme.colorScheme.error
     val unselectedColor = MaterialTheme.colorScheme.error.copy(alpha = 0.72f)
     val dividerColor = MaterialTheme.colorScheme.onError.copy(alpha = 0.55f)
-    val emojiFontSize = with(LocalDensity.current) { iconSize.toSp() }
+    val emojiFontSize = iconSize.value.sp
+    val medicalDescription = context.getString(R.string.escalation_medical_desc)
+    val genericDescription = context.getString(R.string.escalation_generic_desc)
+    val armedDescription = context.getString(R.string.escalation_armed_desc)
 
     Box(
         modifier = modifier
@@ -409,7 +411,7 @@ private fun SegmentedPanicButton(
                 text = "🚑",
                 fontSize = emojiFontSize,
                 modifier = Modifier.semantics {
-                    contentDescription = LocalContext.current.getString(R.string.escalation_medical_desc)
+                    contentDescription = medicalDescription
                 }
             )
         }
@@ -418,7 +420,7 @@ private fun SegmentedPanicButton(
                 text = "🚨",
                 fontSize = emojiFontSize,
                 modifier = Modifier.semantics {
-                    contentDescription = LocalContext.current.getString(R.string.escalation_generic_desc)
+                    contentDescription = genericDescription
                 }
             )
         }
@@ -427,7 +429,7 @@ private fun SegmentedPanicButton(
                 text = "🔫",
                 fontSize = emojiFontSize,
                 modifier = Modifier.semantics {
-                    contentDescription = LocalContext.current.getString(R.string.escalation_armed_desc)
+                    contentDescription = armedDescription
                 }
             )
         }

@@ -8,7 +8,7 @@ services:
       ARIEL_DB_PATH: /data/ariel.db
       FIREBASE_CREDENTIALS_PATH: /run/secrets/firebase-service-account.json
     ports:
-      - "8080:8080"
+      - "8001:8001"
     volumes:
       - ./backend/data:/data
       - ./backend/secrets/firebase-service-account.json:/run/secrets/firebase-service-account.json:ro
