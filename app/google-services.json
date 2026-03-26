@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "51970462827",
+    "project_id": "ariel-67a22",
+    "storage_bucket": "ariel-67a22.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:51970462827:android:a730b640d878c5650c0d2e",
+        "android_client_info": {
+          "package_name": "com.ariel.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBQRtgVXhTBHY0gsxokpNHkqYWAlfWonCk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

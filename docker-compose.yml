@@ -1,0 +1,14 @@
+services:
+  ariel-relay:
+    build:
+      context: ./backend
+    container_name: ariel-relay
+    restart: unless-stopped
+    environment:
+      ARIEL_DB_PATH: /data/ariel.db
+      FIREBASE_CREDENTIALS_PATH: /run/secrets/firebase-service-account.json
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend/data:/data
+      - ./backend/secrets/firebase-service-account.json:/run/secrets/firebase-service-account.json:ro
