@@ -3,10 +3,11 @@
 Ariel is an experimental Android app designed for emergency situations. It allows users to form a "Panic Pool" where any member can trigger a loud alarm on all other members' phones.
 
 ## Features
-- **3-Second Panic**: Hold the red button for 3 seconds to trigger.
+- **1.5-Second Panic**: Hold the panic button for 1.5 seconds to trigger.
 - **Home Widget**: One-tap immediate panic button.
 - **Loud Alarm**: Plays even if the phone is in Silent or Do Not Disturb (DND) mode.
-- **Multi-Path Connectivity**: Uses Google Nearby Connections (Bluetooth & WiFi) and placeholders for Internet (FCM).
+- **Multi-Path Connectivity**: Uses Nearby (Bluetooth & WiFi) plus internet relay push notifications.
+- **Escalation Modes**: Generic, medical, and armed-response context payloads.
 - **Acknowledge**: Tapping the alert stops the sound and notifies the sender.
 
 ## Quick Start (Pre-requisites)
@@ -52,6 +53,36 @@ To generate an unsigned release APK for local sharing:
 ```
 The APK will be located at: `app/build/outputs/apk/release/app-release-unsigned.apk`
 *Note: For official App Store distribution, you would need to [sign the APK](https://developer.android.com/studio/publish/app-signing) with a production key.*
+
+## Internet Relay Backend (Docker Compose)
+Use this when buddies are out of Nearby range and internet/mobile data is available.
+
+1. Create a Firebase project and enable Cloud Messaging.
+2. Generate a Firebase service account JSON file.
+3. Save it as: `backend/secrets/firebase-service-account.json`
+4. Start the relay backend:
+   ```bash
+   docker compose up -d --build
+   ```
+5. Check health:
+   ```bash
+   curl http://localhost:8080/health
+   ```
+6. In the app **Settings** screen, set **Relay Backend URL** to your reachable host (for example `http://192.168.1.20:8080`).
+
+Android client Firebase setup (required for push token registration):
+1. Add these keys to `local.properties`:
+   ```properties
+   firebase.apiKey=YOUR_FIREBASE_API_KEY
+   firebase.appId=YOUR_FIREBASE_APP_ID
+   firebase.projectId=YOUR_FIREBASE_PROJECT_ID
+   firebase.senderId=YOUR_FIREBASE_SENDER_ID
+   ```
+2. Rebuild the app (`./gradlew :app:assembleDebug`) and reinstall.
+
+Notes:
+- Nearby is still active as local fallback.
+- SMS transport is removed.
 
 ## Virtual Buddy CLI (Simulator)
 If you only have one real device, you can use the included Python script to simulate a second "friend".

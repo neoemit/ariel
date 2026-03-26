@@ -1,3 +1,52 @@
 <resources>
     <string name="app_name">Ariel</string>
+    <string name="nav_panic">Panic</string>
+    <string name="nav_pairing">Pairing</string>
+    <string name="nav_settings">Settings</string>
+
+    <string name="status_none_online">No Buddies Online</string>
+    <string name="status_one_online">1 Buddy Online</string>
+    <string name="status_many_online">%1$d Buddies Online</string>
+    <string name="alert_active">ALERT ACTIVE</string>
+    <string name="alert_notified">Your buddies have been notified</string>
+    <string name="reset_panic">RESET PANIC</string>
+    <string name="hold_to_trigger">HOLD BUTTON FOR 1.5 SECONDS TO TRIGGER</string>
+    <string name="panic">PANIC</string>
+    <string name="a11y_hold_panic">Hold to trigger panic</string>
+    <string name="snack_acknowledged">%1$s has acknowledged your alert!</string>
+    <string name="escalation_generic">Generic</string>
+    <string name="escalation_medical">Medical</string>
+    <string name="escalation_armed">Armed</string>
+    <string name="escalation_selected_generic">Generic panic details sent.</string>
+    <string name="escalation_selected_medical">Medical assistance details sent.</string>
+    <string name="escalation_selected_armed">Armed response details sent.</string>
+    <string name="escalation_generic_desc">Send generic emergency alert</string>
+    <string name="escalation_medical_desc">Request medical assistance</string>
+    <string name="escalation_armed_desc">Request armed response</string>
+
+    <string name="your_id">Your ID: %1$s</string>
+    <string name="a11y_my_qr">My QR Code</string>
+    <string name="scan_qr_button">SCAN BUDDY\'S QR CODE</string>
+    <string name="your_panic_pool">YOUR PANIC POOL</string>
+    <string name="edit_nickname">Edit Nickname</string>
+    <string name="delete_friend">Delete Friend</string>
+    <string name="no_friends">No friends paired yet.</string>
+    <string name="cancel">CANCEL</string>
+    <string name="set_nickname">Set Nickname</string>
+    <string name="id_label">ID: %1$s</string>
+    <string name="nickname">Nickname</string>
+    <string name="save">SAVE</string>
+
+    <string name="reset_all">RESET ALL CONNECTIONS</string>
+    <string name="alert_sound">Alert sound: %1$s</string>
+    <string name="about">ABOUT</string>
+    <string name="about_title">About Ariel</string>
+    <string name="about_text">Ariel helps you stay connected with your buddies and send emergency alerts with a single press. Nearby (Bluetooth/WiFi) and internet relay push can both deliver alerts.</string>
+    <string name="close">CLOSE</string>
+    <string name="version_display">Version %1$s</string>
+    <string name="relay_url_title">Internet Relay</string>
+    <string name="relay_url_label">Relay Backend URL</string>
+    <string name="relay_url_placeholder">https://your-relay-host</string>
+    <string name="relay_url_hint">Set this to your Docker relay URL so alerts work over mobile/internet range.</string>
+    <string name="save_relay_url">SAVE RELAY URL</string>
 </resources>

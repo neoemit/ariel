@@ -1,127 +1,134 @@
 package com.ariel.app
 
-import android.app.*
-import android.util.Log
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
-import android.net.wifi.WifiManager
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
-import android.os.Handler
-import android.os.Looper
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import java.util.UUID
 
 class SirenService : Service() {
     private var mediaPlayer: MediaPlayer? = null
-    private val CHANNEL_ID = "PanicChannel"
-    private val MONITOR_CHANNEL_ID = "MonitorChannel"
-    private val NOTIFICATION_ID = 1001
-    private val MONITOR_ID = 1002
-    
+    private val channelId = "PanicChannel"
+    private val monitorChannelId = "MonitorChannel"
+    private val notificationId = 1001
+    private val monitorNotificationId = 1002
+
     private var nearbyManager: NearbyManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
-    private var wifiLock: WifiManager.WifiLock? = null
     private var currentPanicSender: String? = null
+    private var currentPanicEventId: String? = null
+    private val handledEventIds = LinkedHashSet<String>()
+    private val handledAckIds = LinkedHashSet<String>()
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (wakeLock == null) {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Ariel:SirenServiceWakeLock").apply {
-                acquire()
-            }
-        }
-        if (wifiLock == null) {
-            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "Ariel:WifiLock").apply {
-                acquire()
-            }
-        }
         val action = intent?.action
         Log.d("ArielService", "onStartCommand: action=$action")
-        
+
         when (action) {
             "START_MONITORING" -> {
                 startMonitoring()
                 nearbyManager?.triggerPeerCountRefresh()
             }
-            "STOP_SIREN" -> stopSiren()
-            "TRIGGER_PANIC" -> {
-                startMonitoring() // ensure initialized
-                nearbyManager?.broadcastPanic()
+
+            "SYNC_PUSH_REGISTRATION" -> {
+                syncPushRegistration()
             }
+
+            "STOP_SIREN" -> {
+                stopSiren()
+            }
+
+            "TRIGGER_PANIC" -> {
+                startMonitoring()
+                val escalationType = intent.getStringExtra("ESCALATION_TYPE") ?: PanicViewModel.ESCALATION_GENERIC
+                val eventId = UUID.randomUUID().toString()
+                nearbyManager?.enterUrgentMode()
+                nearbyManager?.broadcastPanic(escalationType, eventId)
+                sendRelayPanic(eventId, escalationType)
+            }
+
             "ADD_FRIEND" -> {
-                startMonitoring() // ensure initialized
+                startMonitoring()
                 val friendName = intent.getStringExtra("FRIEND_NAME")
                 friendName?.let {
                     Log.d("ArielService", "ADD_FRIEND: $it")
                     nearbyManager?.addFriend(it)
                 }
             }
+
             "REMOVE_FRIEND" -> {
                 val friendName = intent.getStringExtra("FRIEND_NAME")
                 friendName?.let { nearbyManager?.removeFriend(it) }
             }
+
             "CLEAR_POOL" -> {
                 nearbyManager?.clearFriends()
             }
+
             "SIMULATED_PANIC" -> {
                 val sender = intent.getStringExtra("SENDER_NAME") ?: "Virtual Buddy"
                 Log.d("ArielService", "SIMULATED_PANIC triggered by $sender")
                 startSiren()
-                showPanicNotification(sender)
+                showPanicNotification(sender, PanicViewModel.ESCALATION_GENERIC)
             }
+
             "SIMULATED_ACK" -> {
                 val id = intent.getStringExtra("SENDER_NAME") ?: "VirtualBuddy_01"
                 Log.d("ArielService", "SIMULATED_ACK from $id")
-                showAckNotification(id)
-                val it = Intent("com.ariel.app.ACKNOWLEDGED").apply {
-                    putExtra("ACKNOWLEDGER_NAME", id)
-                    setPackage(packageName)
-                }
-                sendBroadcast(it)
+                handleIncomingAcknowledge(id, null)
+            }
+
+            "REMOTE_PANIC_PUSH" -> {
+                startMonitoring()
+                val sender = intent.getStringExtra("SENDER_NAME") ?: return START_STICKY
+                val escalationType = intent.getStringExtra("ESCALATION_TYPE") ?: PanicViewModel.ESCALATION_GENERIC
+                val eventId = intent.getStringExtra("EVENT_ID") ?: "push_${sender}_${System.currentTimeMillis()}"
+                handleIncomingPanic(sender, escalationType, eventId)
+            }
+
+            "REMOTE_ACK_PUSH" -> {
+                val acknowledger = intent.getStringExtra("ACKNOWLEDGER_NAME") ?: return START_STICKY
+                val eventId = intent.getStringExtra("EVENT_ID")
+                handleIncomingAcknowledge(acknowledger, eventId)
             }
         }
 
-        val senderName = intent?.getStringExtra("SENDER_NAME")
-        if (senderName != null && action != "SIMULATED_PANIC" && action != "SIMULATED_ACK" && action != "com.ariel.app.ACKNOWLEDGED") {
-            startSiren()
-            showPanicNotification(senderName)
-        }
-        
         return START_STICKY
     }
 
     private fun startMonitoring() {
         if (nearbyManager == null) {
             val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
-            val myName = prefs.getString("user_name", null) ?: run {
-                val newName = "User_${(1000..9999).random()}"
-                prefs.edit().putString("user_name", newName).apply()
-                newName
-            }
+            val myName = getOrCreateMyName(prefs)
+
             nearbyManager = NearbyManager(this, myName).apply {
-                onPanicReceived = { sender ->
-                    Log.d("ArielService", "PANIC RECEIVED FROM $sender")
-                    currentPanicSender = sender
-                    val intent = Intent(this@SirenService, SirenService::class.java).apply {
-                        putExtra("SENDER_NAME", sender)
-                    }
-                    startService(intent)
+                onPanicReceived = { sender, escalationType, eventId ->
+                    Log.d("ArielService", "PANIC RECEIVED FROM $sender type=$escalationType event=$eventId")
+                    handleIncomingPanic(sender, escalationType, eventId)
                 }
-                
+
                 onAcknowledgeReceived = { acknowledger ->
                     Log.d("ArielService", "ACK RECEIVED FROM $acknowledger")
-                    showAckNotification(acknowledger)
-                    val it = Intent("com.ariel.app.ACKNOWLEDGED").apply {
-                        putExtra("ACKNOWLEDGER_NAME", acknowledger)
-                        setPackage(packageName)
-                    }
-                    sendBroadcast(it)
+                    handleIncomingAcknowledge(acknowledger, null)
                 }
 
                 onPairingReceived = { friendName ->
@@ -131,34 +138,145 @@ class SirenService : Service() {
                         currentFriends.add(friendName)
                         prefs.edit().putStringSet("friends", currentFriends).apply()
                         Log.d("ArielService", "Added $friendName to friends via reciprocal pairing")
-                        // Reload NearbyManager with the new friend so we don't ignore them in discovery
                         addFriend(friendName)
-                        
-                        // Notify UI
-                        val it = Intent("com.ariel.app.FRIENDS_UPDATED").apply {
+                        val updateIntent = Intent("com.ariel.app.FRIENDS_UPDATED").apply {
                             setPackage(packageName)
                         }
-                        sendBroadcast(it)
+                        sendBroadcast(updateIntent)
                     }
                 }
-
-
             }
-            
-            // Reload friends
+
             val savedFriends = prefs.getStringSet("friends", emptySet()) ?: emptySet()
             savedFriends.forEach { nearbyManager?.addFriend(it) }
-            
             nearbyManager?.startPairing()
         }
+
         showMonitorNotification()
+        syncPushRegistration()
+    }
+
+    private fun getOrCreateMyName(prefs: android.content.SharedPreferences): String {
+        return prefs.getString("user_name", null) ?: run {
+            val newName = "User_${(1000..9999).random()}"
+            prefs.edit().putString("user_name", newName).apply()
+            newName
+        }
+    }
+
+    private fun syncPushRegistration() {
+        val backendUrl = RelayBackendClient.getBackendUrl(this) ?: return
+        if (backendUrl.isBlank()) return
+        if (!FirebaseBootstrap.ensureInitialized(this)) return
+
+        val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
+        val myName = getOrCreateMyName(prefs)
+
+        runCatching {
+            FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { token ->
+                    serviceScope.launch {
+                        RelayBackendClient.registerDevice(this@SirenService, myName, token)
+                    }
+                }
+                .addOnFailureListener { error ->
+                    Log.w("ArielService", "FCM token fetch failed: ${error.message}")
+                }
+        }.onFailure { error ->
+            Log.w("ArielService", "Firebase Messaging unavailable: ${error.message}")
+        }
+    }
+
+    private fun sendRelayPanic(eventId: String, escalationType: String) {
+        val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
+        val senderId = getOrCreateMyName(prefs)
+        val friends = prefs.getStringSet("friends", emptySet())?.filter { it.isNotBlank() } ?: emptyList()
+        if (friends.isEmpty()) return
+        if (RelayBackendClient.getBackendUrl(this).isNullOrBlank()) return
+
+        serviceScope.launch {
+            RelayBackendClient.sendPanic(
+                context = this@SirenService,
+                senderId = senderId,
+                eventId = eventId,
+                escalationType = escalationType,
+                recipientIds = friends
+            )
+        }
+    }
+
+    private fun sendRelayAcknowledgment(senderId: String, eventId: String?) {
+        if (RelayBackendClient.getBackendUrl(this).isNullOrBlank()) return
+        val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
+        val acknowledgerId = getOrCreateMyName(prefs)
+        val ackEventId = eventId ?: "ack_${senderId}_${System.currentTimeMillis()}"
+
+        serviceScope.launch {
+            RelayBackendClient.sendAcknowledgment(
+                context = this@SirenService,
+                senderId = senderId,
+                acknowledgerId = acknowledgerId,
+                eventId = ackEventId
+            )
+        }
+    }
+
+    private fun handleIncomingPanic(sender: String, escalationType: String, eventId: String) {
+        if (!markEventIfNew(eventId)) {
+            Log.d("ArielService", "Ignoring duplicate panic event $eventId")
+            return
+        }
+
+        currentPanicSender = sender
+        currentPanicEventId = eventId
+        startSiren()
+        showPanicNotification(sender, escalationType)
+    }
+
+    private fun handleIncomingAcknowledge(acknowledger: String, eventId: String?) {
+        if (eventId != null) {
+            val ackKey = "$acknowledger:$eventId"
+            if (!markAckIfNew(ackKey)) {
+                Log.d("ArielService", "Ignoring duplicate ack event $ackKey")
+                return
+            }
+        }
+
+        showAckNotification(acknowledger)
+        val intent = Intent("com.ariel.app.ACKNOWLEDGED").apply {
+            putExtra("ACKNOWLEDGER_NAME", acknowledger)
+            setPackage(packageName)
+        }
+        sendBroadcast(intent)
+    }
+
+    private fun markEventIfNew(eventId: String): Boolean {
+        synchronized(handledEventIds) {
+            if (handledEventIds.contains(eventId)) return false
+            handledEventIds.add(eventId)
+            while (handledEventIds.size > 100) {
+                handledEventIds.remove(handledEventIds.first())
+            }
+            return true
+        }
+    }
+
+    private fun markAckIfNew(ackKey: String): Boolean {
+        synchronized(handledAckIds) {
+            if (handledAckIds.contains(ackKey)) return false
+            handledAckIds.add(ackKey)
+            while (handledAckIds.size > 100) {
+                handledAckIds.remove(handledAckIds.first())
+            }
+            return true
+        }
     }
 
     private fun showMonitorNotification() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                MONITOR_CHANNEL_ID,
+                monitorChannelId,
                 "Ariel Background Service",
                 NotificationManager.IMPORTANCE_LOW
             )
@@ -169,10 +287,13 @@ class SirenService : Service() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, MONITOR_CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, monitorChannelId)
             .setContentTitle("Ariel is active")
             .setContentText("Listening for panic signals from friends")
             .setSmallIcon(android.R.drawable.ic_menu_compass)
@@ -181,7 +302,7 @@ class SirenService : Service() {
             .setContentIntent(pendingIntent)
             .build()
 
-        startForeground(MONITOR_ID, notification)
+        startForeground(monitorNotificationId, notification)
     }
 
     private fun startSiren() {
@@ -190,21 +311,36 @@ class SirenService : Service() {
         audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
 
         if (mediaPlayer == null) {
-            var alert = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            if (alert == null) {
-                alert = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
+            var alertUri = prefs.getString("panic_ringtone", null)?.let { Uri.parse(it) }
+            if (alertUri == null) {
+                alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             }
+            if (alertUri == null) {
+                alertUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            }
+
             mediaPlayer = MediaPlayer().apply {
-                setDataSource(applicationContext, alert)
+                setDataSource(applicationContext, alertUri!!)
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_ALARM)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build()
                 )
+                setWakeMode(applicationContext, PowerManager.PARTIAL_WAKE_LOCK)
                 isLooping = true
                 prepare()
                 start()
+            }
+            if (wakeLock == null) {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                wakeLock = powerManager.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    "Ariel:SirenWhilePlaying"
+                ).apply {
+                    acquire(10 * 60 * 1000L)
+                }
             }
         }
     }
@@ -213,40 +349,53 @@ class SirenService : Service() {
         mediaPlayer?.stop()
         mediaPlayer?.release()
         mediaPlayer = null
-        
-        // Notify the buddy who triggered the alert that we are coming
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+        }
+        wakeLock = null
+
         currentPanicSender?.let { sender ->
             nearbyManager?.sendAcknowledge(sender)
+            sendRelayAcknowledgment(sender, currentPanicEventId)
         }
         currentPanicSender = null
+        currentPanicEventId = null
 
-        // Notify the local app that it was acknowledged
-        val ackIntent = Intent("com.ariel.app.ACKNOWLEDGED")
+        val ackIntent = Intent("com.ariel.app.ACKNOWLEDGED").apply {
+            setPackage(packageName)
+        }
         sendBroadcast(ackIntent)
 
-        // Return to the monitoring notification (don't kill the service!)
         showMonitorNotification()
-        
-        // Ensure peer count is still accurate in UI
         nearbyManager?.triggerPeerCountRefresh()
     }
 
-    private fun showPanicNotification(senderName: String) {
+    private fun showPanicNotification(senderName: String, escalationType: String) {
         val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
         val nickname = prefs.getString("nickname_$senderName", null)
         val displayName = nickname ?: senderName
+        val normalizedEscalation = when (escalationType.uppercase()) {
+            PanicViewModel.ESCALATION_MEDICAL -> PanicViewModel.ESCALATION_MEDICAL
+            PanicViewModel.ESCALATION_ARMED -> PanicViewModel.ESCALATION_ARMED
+            else -> PanicViewModel.ESCALATION_GENERIC
+        }
+
+        val (emoji, reasonText) = when (normalizedEscalation) {
+            PanicViewModel.ESCALATION_MEDICAL -> "🚑" to "$displayName requires medical assistance."
+            PanicViewModel.ESCALATION_ARMED -> "🔫" to "$displayName is in danger and requires armed response."
+            else -> "🚨" to "$displayName requires urgent assistance."
+        }
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID,
+                channelId,
                 "Panic Alerts",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Loud alerts for panic signals"
                 enableVibration(true)
-                setBypassDnd(true) // Crucial for DND bypass
+                setBypassDnd(true)
             }
             notificationManager.createNotificationChannel(channel)
         }
@@ -255,21 +404,24 @@ class SirenService : Service() {
             action = "STOP_SIREN"
         }
         val stopPendingIntent = PendingIntent.getService(
-            this, 0, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            this,
+            0,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("ARIEL PANIC ALERT!")
-            .setContentText("$displayName is in danger!")
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setContentTitle("ARIEL PANIC ALERT $emoji")
+            .setContentText(reasonText)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setOngoing(true)
-            .setContentIntent(stopPendingIntent) // Tapping notification stops sirens
+            .setContentIntent(stopPendingIntent)
             .addAction(android.R.drawable.ic_delete, "I am coming!", stopPendingIntent)
             .build()
 
-        startForeground(NOTIFICATION_ID, notification)
+        startForeground(notificationId, notification)
     }
 
     private fun showAckNotification(acknowledgerId: String) {
@@ -278,11 +430,10 @@ class SirenService : Service() {
         val displayName = nickname ?: acknowledgerId
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val ACK_CHANNEL_ID = "AckChannel"
-
+        val ackChannelId = "AckChannel"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                ACK_CHANNEL_ID,
+                ackChannelId,
                 "Acknowledgments",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
@@ -291,7 +442,7 @@ class SirenService : Service() {
             notificationManager.createNotificationChannel(channel)
         }
 
-        val notification = NotificationCompat.Builder(this, ACK_CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, ackChannelId)
             .setContentTitle("Help is on the way!")
             .setContentText("$displayName has acknowledged your alert.")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
@@ -309,10 +460,7 @@ class SirenService : Service() {
             if (it.isHeld) it.release()
         }
         wakeLock = null
-        wifiLock?.let {
-            if (it.isHeld) it.release()
-        }
-        wifiLock = null
+        serviceScope.cancel()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

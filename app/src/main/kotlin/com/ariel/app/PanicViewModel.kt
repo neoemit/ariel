@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 class PanicViewModel(application: Application) : AndroidViewModel(application) {
     private val context = application.applicationContext
     private val prefs = context.getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
-    
+
     val myName: String = prefs.getString("user_name", null) ?: run {
         val newName = "User_${(1000..9999).random()}"
         prefs.edit().putString("user_name", newName).apply()
@@ -41,22 +41,30 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     private val _peerCount = MutableStateFlow(0)
     val peerCount = _peerCount.asStateFlow()
 
+    private val _panicRingtoneUri = MutableStateFlow<String?>(null)
+    val panicRingtoneUri = _panicRingtoneUri.asStateFlow()
+
     private val _nicknames = MutableStateFlow<Map<String, String>>(emptyMap())
     val nicknames = _nicknames.asStateFlow()
 
+    private val _selectedEscalation = MutableStateFlow(ESCALATION_GENERIC)
+    val selectedEscalation = _selectedEscalation.asStateFlow()
+
+    private val _relayBackendUrl = MutableStateFlow("")
+    val relayBackendUrl = _relayBackendUrl.asStateFlow()
+
     init {
-        // Load friends
         val savedFriends = prefs.getStringSet("friends", emptySet()) ?: emptySet()
         _friends.value = savedFriends.toList()
-        
-        // Load nicknames
+
         val currentNicknames = mutableMapOf<String, String>()
         savedFriends.forEach { id ->
             prefs.getString("nickname_$id", null)?.let { currentNicknames[id] = it }
         }
         _nicknames.value = currentNicknames
-        
-        // Ensure service is running
+        _panicRingtoneUri.value = prefs.getString("panic_ringtone", null)
+        _relayBackendUrl.value = RelayBackendClient.getBackendUrl(context).orEmpty()
+
         context.startService(Intent(context, SirenService::class.java).apply {
             action = "START_MONITORING"
         })
@@ -69,7 +77,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
                         val displayName = _nicknames.value[id] ?: id
                         Log.d("PanicVM", "ACK received from $id ($displayName)")
                         _lastAcknowledgment.value = displayName
-                        
+
                         viewModelScope.launch {
                             delay(5000)
                             if (_lastAcknowledgment.value == displayName) {
@@ -77,22 +85,24 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
                             }
                         }
                     }
+
                     "com.ariel.app.FRIENDS_UPDATED" -> {
                         refreshFriends()
                         context?.startService(Intent(context, SirenService::class.java).apply {
                             action = "START_MONITORING"
                         })
                     }
+
                     "com.ariel.app.PEER_COUNT_CHANGED" -> {
                         val count = intent.getIntExtra("COUNT", 0)
                         Log.d("PanicVM", "Peer count update: $count")
                         _peerCount.value = count
                     }
+
                     "com.ariel.app.STATUS_UPDATE" -> {
                         val statusMsg = intent.getStringExtra("STATUS")
                         Log.d("PanicVM", "Status update: $statusMsg")
                         _status.value = statusMsg
-                        // Clear status after 3 seconds
                         viewModelScope.launch {
                             delay(3000)
                             if (_status.value == statusMsg) {
@@ -123,13 +133,14 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopPairing() {
-        // We actually want monitoring to keep running for panic alerts
+        // Monitoring remains active by design.
     }
 
     fun triggerPanic() {
         _isPanicTriggered.value = true
         context.startService(Intent(context, SirenService::class.java).apply {
             action = "TRIGGER_PANIC"
+            putExtra("ESCALATION_TYPE", _selectedEscalation.value)
         })
     }
 
@@ -150,8 +161,11 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         val currentFriends = _friends.value.toMutableSet()
         if (currentFriends.remove(name)) {
             _friends.value = currentFriends.toList()
-            prefs.edit().putStringSet("friends", currentFriends).remove("nickname_$name").apply()
-            
+            prefs.edit()
+                .putStringSet("friends", currentFriends)
+                .remove("nickname_$name")
+                .apply()
+
             val currentNicknames = _nicknames.value.toMutableMap()
             currentNicknames.remove(name)
             _nicknames.value = currentNicknames
@@ -175,29 +189,35 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         _nicknames.value = currentNicknames
     }
 
+    fun setRelayBackendUrl(url: String) {
+        RelayBackendClient.setBackendUrl(context, url)
+        _relayBackendUrl.value = RelayBackendClient.getBackendUrl(context).orEmpty()
+        context.startService(Intent(context, SirenService::class.java).apply {
+            action = "SYNC_PUSH_REGISTRATION"
+        })
+    }
+
     fun handlePress(isPressed: Boolean) {
         if (!isPressed) {
             _panicTriggerProgress.value = 0f
             return
         }
-        
+
         viewModelScope.launch {
             val startTime = System.currentTimeMillis()
-            while (System.currentTimeMillis() - startTime < 3000) {
-                if (!_isPressed) break // Need to track state accurately
-                
+            while (System.currentTimeMillis() - startTime < PANIC_HOLD_DURATION_MS) {
+                if (!_isPressed) break
                 val elapsed = System.currentTimeMillis() - startTime
-                _panicTriggerProgress.value = elapsed / 3000f
+                _panicTriggerProgress.value = elapsed.toFloat() / PANIC_HOLD_DURATION_MS.toFloat()
                 delay(16)
             }
-            
+
             if (_panicTriggerProgress.value >= 1f) {
                 triggerPanic()
             }
         }
     }
 
-    // Since Compose handlePress is easier within UI, I'll provide a direct progress setter
     fun setTriggerProgress(progress: Float) {
         _panicTriggerProgress.value = progress
         if (progress >= 1f && !_isPanicTriggered.value) {
@@ -210,10 +230,21 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         _isPressed = pressed
         if (!pressed) _panicTriggerProgress.value = 0f
     }
-    
+
     fun resetPanic() {
         _isPanicTriggered.value = false
         _panicTriggerProgress.value = 0f
+        _selectedEscalation.value = ESCALATION_GENERIC
+    }
+
+    fun setEscalationMode(escalationType: String) {
+        val normalized = when (escalationType.uppercase()) {
+            ESCALATION_GENERIC -> ESCALATION_GENERIC
+            ESCALATION_MEDICAL -> ESCALATION_MEDICAL
+            ESCALATION_ARMED -> ESCALATION_ARMED
+            else -> ESCALATION_GENERIC
+        }
+        _selectedEscalation.value = normalized
     }
 
     fun clearPool() {
@@ -225,14 +256,30 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         })
     }
 
+    fun setPanicRingtone(uriString: String?) {
+        if (uriString == null) {
+            prefs.edit().remove("panic_ringtone").apply()
+        } else {
+            prefs.edit().putString("panic_ringtone", uriString).apply()
+        }
+        _panicRingtoneUri.value = uriString
+    }
+
     private fun refreshFriends() {
         val savedFriends = prefs.getStringSet("friends", emptySet()) ?: emptySet()
         _friends.value = savedFriends.toList()
-        
+
         val currentNicknames = mutableMapOf<String, String>()
         savedFriends.forEach { id ->
             prefs.getString("nickname_$id", null)?.let { currentNicknames[id] = it }
         }
         _nicknames.value = currentNicknames
+    }
+
+    companion object {
+        const val PANIC_HOLD_DURATION_MS = 1_500L
+        const val ESCALATION_GENERIC = "GENERIC"
+        const val ESCALATION_MEDICAL = "MEDICAL"
+        const val ESCALATION_ARMED = "ARMED"
     }
 }

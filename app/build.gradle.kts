@@ -1,18 +1,40 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.gms.google-services")
+}
+
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
+}
+
+fun escapedLocalProperty(key: String): String {
+    return (localProperties.getProperty(key) ?: "")
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
 }
 
 android {
     namespace = "com.ariel.app"
     compileSdk = 34
 
+    val appVersionMinor = 6
+
     defaultConfig {
         applicationId = "com.ariel.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionMinor
+        versionName = "1.$appVersionMinor"
+        buildConfigField("String", "FIREBASE_API_KEY", "\"${escapedLocalProperty("firebase.apiKey")}\"")
+        buildConfigField("String", "FIREBASE_APP_ID", "\"${escapedLocalProperty("firebase.appId")}\"")
+        buildConfigField("String", "FIREBASE_PROJECT_ID", "\"${escapedLocalProperty("firebase.projectId")}\"")
+        buildConfigField("String", "FIREBASE_SENDER_ID", "\"${escapedLocalProperty("firebase.senderId")}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -38,6 +60,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
@@ -59,7 +82,11 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("com.google.android.material:material:1.11.0")
+    // Firebase Cloud Messaging (internet relay push)
+    implementation(platform("com.google.firebase:firebase-bom:34.11.0"))
+    implementation("com.google.firebase:firebase-messaging")
     
     // Nearby Connections
     implementation("com.google.android.gms:play-services-nearby:19.0.0")

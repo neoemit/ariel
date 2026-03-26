@@ -55,6 +55,15 @@
                 android:value="Emergency alert system for user safety and distress signaling" />
         </service>
 
+        <service
+            android:name=".ArielFirebaseMessagingService"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".PanicWidget"
             android:exported="false">
