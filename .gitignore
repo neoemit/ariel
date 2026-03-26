@@ -16,6 +16,7 @@ captures/
 local.properties
 .env
 .env.*
+*.hprof
 
 # Signing keys
 *.keystore

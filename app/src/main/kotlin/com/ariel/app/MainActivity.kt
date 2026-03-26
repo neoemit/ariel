@@ -24,10 +24,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,7 +38,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import android.content.Context
@@ -51,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.toSp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import androidx.core.view.WindowCompat
@@ -320,7 +319,7 @@ private fun SegmentedPanicButton(
     val selectedColor = MaterialTheme.colorScheme.error
     val unselectedColor = MaterialTheme.colorScheme.error.copy(alpha = 0.72f)
     val dividerColor = MaterialTheme.colorScheme.onError.copy(alpha = 0.55f)
-    val iconColor = MaterialTheme.colorScheme.onError
+    val emojiFontSize = with(LocalDensity.current) { iconSize.toSp() }
 
     Box(
         modifier = modifier
@@ -406,27 +405,30 @@ private fun SegmentedPanicButton(
         }
 
         SegmentIcon(angleDegrees = 210f, distance = iconDistance) {
-            Icon(
-                imageVector = Icons.Default.LocalHospital,
-                contentDescription = LocalContext.current.getString(R.string.escalation_medical_desc),
-                tint = iconColor,
-                modifier = Modifier.size(iconSize)
+            Text(
+                text = "🚑",
+                fontSize = emojiFontSize,
+                modifier = Modifier.semantics {
+                    contentDescription = LocalContext.current.getString(R.string.escalation_medical_desc)
+                }
             )
         }
         SegmentIcon(angleDegrees = 90f, distance = iconDistance) {
-            Icon(
-                imageVector = Icons.Default.Warning,
-                contentDescription = LocalContext.current.getString(R.string.escalation_generic_desc),
-                tint = iconColor,
-                modifier = Modifier.size(iconSize)
+            Text(
+                text = "🚨",
+                fontSize = emojiFontSize,
+                modifier = Modifier.semantics {
+                    contentDescription = LocalContext.current.getString(R.string.escalation_generic_desc)
+                }
             )
         }
         SegmentIcon(angleDegrees = 330f, distance = iconDistance) {
-            Icon(
-                painter = painterResource(R.drawable.ic_gun),
-                contentDescription = LocalContext.current.getString(R.string.escalation_armed_desc),
-                tint = iconColor,
-                modifier = Modifier.size(iconSize)
+            Text(
+                text = "🔫",
+                fontSize = emojiFontSize,
+                modifier = Modifier.semantics {
+                    contentDescription = LocalContext.current.getString(R.string.escalation_armed_desc)
+                }
             )
         }
     }

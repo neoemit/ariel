@@ -23,7 +23,7 @@ android {
     namespace = "com.ariel.app"
     compileSdk = 34
 
-    val appVersionMinor = 7
+    val appVersionMinor = 8
 
     defaultConfig {
         applicationId = "com.ariel.app"
