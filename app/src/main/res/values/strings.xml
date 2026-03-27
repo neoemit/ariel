@@ -25,9 +25,14 @@
     <string name="escalation_armed_desc">Request armed response</string>
 
     <string name="your_id">Your ID: %1$s</string>
+    <string name="pairing_overview_title">Your safety network</string>
+    <string name="pairing_overview_body">Share your QR code and scan trusted buddies to build your panic pool.</string>
+    <string name="pairing_buddy_count">%1$d paired buddies</string>
+    <string name="pairing_no_buddies_hint">Scan a buddy QR code to start your panic pool.</string>
     <string name="a11y_my_qr">My QR Code</string>
-    <string name="scan_qr_button">SCAN BUDDY\'S QR CODE</string>
-    <string name="your_panic_pool">YOUR PANIC POOL</string>
+    <string name="scan_qr_button">Scan buddy QR code</string>
+    <string name="your_panic_pool">Your panic pool</string>
+    <string name="pairing_pool_subtitle">Manage the trusted people who receive and respond to your panic alerts.</string>
     <string name="edit_nickname">Edit Nickname</string>
     <string name="delete_friend">Delete Friend</string>
     <string name="no_friends">No friends paired yet.</string>
@@ -49,4 +54,16 @@
     <string name="relay_url_placeholder">https://your-relay-host</string>
     <string name="relay_url_hint">Set this to your Docker relay URL so alerts work over mobile/internet range.</string>
     <string name="save_relay_url">SAVE RELAY URL</string>
+    <string name="settings_general_title">App preferences</string>
+    <string name="settings_relay_section_desc">Keep internet relay configured so buddies remain reachable beyond Bluetooth/WiFi range.</string>
+    <string name="settings_relay_configured">Relay configured</string>
+    <string name="settings_relay_not_configured">Relay not configured</string>
+    <string name="settings_relay_invalid_url">Enter a valid http:// or https:// relay URL.</string>
+    <string name="settings_sound_section_desc">Choose the alarm sound that should play for incoming panic alerts.</string>
+    <string name="settings_danger_zone">Danger zone</string>
+    <string name="settings_danger_zone_desc">Reset all buddy links and clear local pairing data on this device.</string>
+    <string name="settings_reset_confirm_title">Reset all buddy links?</string>
+    <string name="settings_reset_confirm_body">This removes all paired buddies and nicknames from this device. You can pair again anytime.</string>
+    <string name="settings_reset_confirm_action">Reset links</string>
+    <string name="choose_alert_sound">Choose alert sound</string>
 </resources>

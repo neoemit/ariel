@@ -475,9 +475,10 @@ private fun resolveEscalationForTouch(x: Float, y: Float, size: IntSize): String
 
 @Composable
 fun PairingScreen(viewModel: PanicViewModel) {
+    val context = LocalContext.current
     val friends by viewModel.friends.collectAsState()
     val nicknames by viewModel.nicknames.collectAsState()
-    
+
     var isScanning by remember { mutableStateOf(false) }
     var editingFriend by remember { mutableStateOf<String?>(null) }
     var nicknameText by remember { mutableStateOf("") }
@@ -491,138 +492,284 @@ fun PairingScreen(viewModel: PanicViewModel) {
                 viewModel.addFriend(name)
                 isScanning = false
             })
-            Button(
+            FilledTonalButton(
                 onClick = { isScanning = false },
-                modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp)
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(24.dp)
+                    .fillMaxWidth()
             ) {
-                Text(LocalContext.current.getString(R.string.cancel))
+                Text(context.getString(R.string.cancel))
             }
         }
         return
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(LocalContext.current.getString(R.string.your_id, myName), style = MaterialTheme.typography.titleLarge)
-        Spacer(modifier = Modifier.height(16.dp))
-
-        qrBitmap?.let {
-            Image(
-                bitmap = it.asImageBitmap(),
-                contentDescription = LocalContext.current.getString(R.string.a11y_my_qr),
-                modifier = Modifier.size(260.dp).background(Color.White)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(onClick = { isScanning = true },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-        ) {
-            Text(LocalContext.current.getString(R.string.scan_qr_button), color = MaterialTheme.colorScheme.onPrimary)
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(LocalContext.current.getString(R.string.your_panic_pool), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (friends.isNotEmpty()) {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(friends) { friend ->
-                    val nickname = nicknames[friend]
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        item {
+            ElevatedCard(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = nickname ?: friend,
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                if (nickname != null) {
-                                    Text(
-                                        text = friend,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            IconButton(onClick = {
-                                editingFriend = friend
-                                nicknameText = nickname ?: ""
-                            }) {
-                                Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = LocalContext.current.getString(R.string.edit_nickname),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            IconButton(onClick = { viewModel.removeFriend(friend) }) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = LocalContext.current.getString(R.string.delete_friend),
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            }
+                            Icon(
+                                Icons.Default.Wifi,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                        Text(
+                            text = context.getString(R.string.pairing_overview_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Text(
+                        text = context.getString(R.string.your_id, myName),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = context.getString(R.string.pairing_overview_body),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    qrBitmap?.let {
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .size(220.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            color = Color.White,
+                            tonalElevation = 2.dp,
+                            shadowElevation = 2.dp
+                        ) {
+                            Image(
+                                bitmap = it.asImageBitmap(),
+                                contentDescription = context.getString(R.string.a11y_my_qr),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(14.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Button(
+                onClick = { isScanning = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Default.Wifi, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(context.getString(R.string.scan_qr_button))
+            }
+        }
+
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = context.getString(R.string.your_panic_pool),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Text(
+                            text = context.getString(R.string.pairing_buddy_count, friends.size),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+                Text(
+                    text = context.getString(R.string.pairing_pool_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        if (friends.isEmpty()) {
+            item {
+                ElevatedCard(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.elevatedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Icon(
+                                Icons.Default.Wifi,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = context.getString(R.string.no_friends),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = context.getString(R.string.pairing_no_buddies_hint),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
             }
         } else {
-            Text(
-                LocalContext.current.getString(R.string.no_friends),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            items(friends, key = { it }) { friend ->
+                val nickname = nicknames[friend]
+                PairingBuddyCard(
+                    friendId = friend,
+                    nickname = nickname,
+                    onEdit = {
+                        editingFriend = friend
+                        nicknameText = nickname.orEmpty()
+                    },
+                    onDelete = { viewModel.removeFriend(friend) }
+                )
+            }
         }
     }
 
     if (editingFriend != null) {
         AlertDialog(
             onDismissRequest = { editingFriend = null },
-            title = { Text(LocalContext.current.getString(R.string.set_nickname)) },
+            title = { Text(context.getString(R.string.set_nickname)) },
             text = {
-                Column {
-                    Text(LocalContext.current.getString(R.string.id_label, editingFriend))
-                    Spacer(modifier = Modifier.height(8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(context.getString(R.string.id_label, editingFriend ?: ""))
                     OutlinedTextField(
                         value = nicknameText,
                         onValueChange = { nicknameText = it },
-                        label = { Text(LocalContext.current.getString(R.string.nickname)) },
+                        label = { Text(context.getString(R.string.nickname)) },
                         singleLine = true
                     )
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    editingFriend?.let {
-                        viewModel.setNickname(it, nicknameText)
-                    }
+                    editingFriend?.let { viewModel.setNickname(it, nicknameText) }
                     editingFriend = null
                 }) {
-                    Text(LocalContext.current.getString(R.string.save))
+                    Text(context.getString(R.string.save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { editingFriend = null }) {
-                    Text(LocalContext.current.getString(R.string.cancel))
+                    Text(context.getString(R.string.cancel))
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun PairingBuddyCard(
+    friendId: String,
+    nickname: String?,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val context = LocalContext.current
+    val displayName = nickname ?: friendId
+    val buddyInitial = displayName.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Text(
+                    text = buddyInitial,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = displayName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (!nickname.isNullOrBlank()) {
+                    Text(
+                        text = friendId,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            IconButton(onClick = onEdit) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = context.getString(R.string.edit_nickname),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onDelete) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = context.getString(R.string.delete_friend),
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        }
     }
 }
 
@@ -633,6 +780,17 @@ fun SettingsScreen(viewModel: PanicViewModel) {
     val relayBackendUrl by viewModel.relayBackendUrl.collectAsState()
     var ringtoneName by remember { mutableStateOf("Default") }
     var relayBackendUrlInput by remember(relayBackendUrl) { mutableStateOf(relayBackendUrl) }
+    var showResetDialog by remember { mutableStateOf(false) }
+
+    val hasRelayChanges by remember(relayBackendUrlInput, relayBackendUrl) {
+        derivedStateOf {
+            relayBackendUrlInput.trim().trimEnd('/') != relayBackendUrl.trim().trimEnd('/')
+        }
+    }
+    val relayUrlValid by remember(relayBackendUrlInput) {
+        derivedStateOf { isValidRelayUrl(relayBackendUrlInput) }
+    }
+
     val versionDisplay = remember {
         runCatching {
             @Suppress("DEPRECATION")
@@ -666,84 +824,280 @@ fun SettingsScreen(viewModel: PanicViewModel) {
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
+    val relayConfigured = relayBackendUrl.isNotBlank()
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(
-                text = LocalContext.current.getString(R.string.about_text),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = LocalContext.current.getString(R.string.relay_url_title),
-                style = MaterialTheme.typography.titleSmall
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = relayBackendUrlInput,
-                onValueChange = { relayBackendUrlInput = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(LocalContext.current.getString(R.string.relay_url_label)) },
-                placeholder = { Text(LocalContext.current.getString(R.string.relay_url_placeholder)) },
-                singleLine = true
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = LocalContext.current.getString(R.string.relay_url_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = { viewModel.setRelayBackendUrl(relayBackendUrlInput) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(LocalContext.current.getString(R.string.save_relay_url))
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = { viewModel.clearPool() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(112.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(LocalContext.current.getString(R.string.reset_all))
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = {
-                    val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
-                        putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
-                        putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Select panic alert sound")
-                        val existing = ringtoneUri?.let { Uri.parse(it) }
-                        putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, existing)
+        item {
+            ElevatedCard(shape = RoundedCornerShape(24.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                        Text(
+                            text = context.getString(R.string.settings_general_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
-                    ringtoneLauncher.launch(intent)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(112.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(LocalContext.current.getString(R.string.alert_sound, ringtoneName))
+                    Text(
+                        text = context.getString(R.string.about_text),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
 
-        Text(
-            text = LocalContext.current.getString(R.string.version_display, versionDisplay),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        item {
+            ElevatedCard(shape = RoundedCornerShape(20.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Wifi,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = context.getString(R.string.relay_url_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = if (relayConfigured) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        }
+                    ) {
+                        Text(
+                            text = if (relayConfigured) {
+                                context.getString(R.string.settings_relay_configured)
+                            } else {
+                                context.getString(R.string.settings_relay_not_configured)
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (relayConfigured) {
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+
+                    Text(
+                        text = context.getString(R.string.settings_relay_section_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = relayBackendUrlInput,
+                        onValueChange = { relayBackendUrlInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(context.getString(R.string.relay_url_label)) },
+                        placeholder = { Text(context.getString(R.string.relay_url_placeholder)) },
+                        singleLine = true,
+                        isError = !relayUrlValid
+                    )
+
+                    if (!relayUrlValid) {
+                        Text(
+                            text = context.getString(R.string.settings_relay_invalid_url),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        Text(
+                            text = context.getString(R.string.relay_url_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Button(
+                        onClick = { viewModel.setRelayBackendUrl(relayBackendUrlInput) },
+                        enabled = hasRelayChanges && relayUrlValid,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(context.getString(R.string.save_relay_url))
+                    }
+                }
+            }
+        }
+
+        item {
+            ElevatedCard(shape = RoundedCornerShape(20.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Notifications,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = context.getString(R.string.alert_sound, ringtoneName),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Text(
+                        text = context.getString(R.string.settings_sound_section_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    FilledTonalButton(
+                        onClick = {
+                            val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+                                putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
+                                putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Select panic alert sound")
+                                val existing = ringtoneUri?.let { Uri.parse(it) }
+                                putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, existing)
+                            }
+                            ringtoneLauncher.launch(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(context.getString(R.string.choose_alert_sound))
+                    }
+                }
+            }
+        }
+
+        item {
+            ElevatedCard(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = context.getString(R.string.settings_danger_zone),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Text(
+                        text = context.getString(R.string.settings_danger_zone_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedButton(
+                        onClick = { showResetDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(context.getString(R.string.reset_all))
+                    }
+                }
+            }
+        }
+
+        item {
+            Text(
+                text = context.getString(R.string.version_display, versionDisplay),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp)
+            )
+        }
+    }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text(context.getString(R.string.settings_reset_confirm_title)) },
+            text = { Text(context.getString(R.string.settings_reset_confirm_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearPool()
+                    showResetDialog = false
+                }) {
+                    Text(context.getString(R.string.settings_reset_confirm_action))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text(context.getString(R.string.cancel))
+                }
+            }
         )
     }
+}
+
+private fun isValidRelayUrl(value: String): Boolean {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return true
+
+    val uri = runCatching { Uri.parse(trimmed) }.getOrNull() ?: return false
+    val scheme = uri.scheme?.lowercase() ?: return false
+    val host = uri.host
+
+    return (scheme == "http" || scheme == "https") && !host.isNullOrBlank()
 }
