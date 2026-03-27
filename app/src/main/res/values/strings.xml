@@ -25,6 +25,10 @@
     <string name="escalation_armed_desc">Request armed response</string>
 
     <string name="your_id">Your ID: %1$s</string>
+    <string name="pairing_overview_title">Your safety network</string>
+    <string name="pairing_overview_body">Share your QR code and scan trusted buddies to build your panic pool.</string>
+    <string name="pairing_buddy_count">%1$d paired buddies</string>
+    <string name="pairing_no_buddies_hint">Scan a buddy QR code to start your panic pool.</string>
     <string name="a11y_my_qr">My QR Code</string>
     <string name="scan_qr_button">SCAN BUDDY\'S QR CODE</string>
     <string name="your_panic_pool">YOUR PANIC POOL</string>
@@ -49,4 +53,10 @@
     <string name="relay_url_placeholder">https://your-relay-host</string>
     <string name="relay_url_hint">Set this to your Docker relay URL so alerts work over mobile/internet range.</string>
     <string name="save_relay_url">SAVE RELAY URL</string>
+    <string name="settings_general_title">App preferences</string>
+    <string name="settings_relay_section_desc">Keep internet relay configured so buddies remain reachable beyond Bluetooth/WiFi range.</string>
+    <string name="settings_sound_section_desc">Choose the alarm sound that should play for incoming panic alerts.</string>
+    <string name="settings_danger_zone">Danger zone</string>
+    <string name="settings_danger_zone_desc">Reset all buddy links and clear local pairing data on this device.</string>
+    <string name="choose_alert_sound">CHOOSE ALERT SOUND</string>
 </resources>
