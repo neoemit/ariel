@@ -511,20 +511,35 @@ fun PairingScreen(viewModel: PanicViewModel) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            ElevatedCard(
-                shape = RoundedCornerShape(24.dp)
-            ) {
+            ElevatedCard(shape = RoundedCornerShape(24.dp)) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = context.getString(R.string.pairing_overview_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Icon(
+                                Icons.Default.Wifi,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                        Text(
+                            text = context.getString(R.string.pairing_overview_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
                     Text(
                         text = context.getString(R.string.your_id, myName),
                         style = MaterialTheme.typography.bodyMedium,
@@ -567,37 +582,41 @@ fun PairingScreen(viewModel: PanicViewModel) {
                     .height(56.dp),
                 shape = RoundedCornerShape(14.dp)
             ) {
-                Icon(
-                    Icons.Default.Wifi,
-                    contentDescription = null,
-                )
+                Icon(Icons.Default.Wifi, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(context.getString(R.string.scan_qr_button))
             }
         }
 
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = context.getString(R.string.your_panic_pool),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.secondaryContainer
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = context.getString(R.string.pairing_buddy_count, friends.size),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        text = context.getString(R.string.your_panic_pool),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
                     )
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Text(
+                            text = context.getString(R.string.pairing_buddy_count, friends.size),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
                 }
+                Text(
+                    text = context.getString(R.string.pairing_pool_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 
@@ -609,20 +628,34 @@ fun PairingScreen(viewModel: PanicViewModel) {
                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
                     )
                 ) {
-                    Column(
+                    Row(
                         modifier = Modifier.padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(
-                            text = context.getString(R.string.no_friends),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = context.getString(R.string.pairing_no_buddies_hint),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Icon(
+                                Icons.Default.Wifi,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = context.getString(R.string.no_friends),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = context.getString(R.string.pairing_no_buddies_hint),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
@@ -636,9 +669,7 @@ fun PairingScreen(viewModel: PanicViewModel) {
                         editingFriend = friend
                         nicknameText = nickname.orEmpty()
                     },
-                    onDelete = {
-                        viewModel.removeFriend(friend)
-                    }
+                    onDelete = { viewModel.removeFriend(friend) }
                 )
             }
         }
@@ -683,6 +714,10 @@ private fun PairingBuddyCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val displayName = nickname ?: friendId
+    val buddyInitial = displayName.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -692,11 +727,23 @@ private fun PairingBuddyCard(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Text(
+                    text = buddyInitial,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = nickname ?: friendId,
+                    text = displayName,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -711,14 +758,14 @@ private fun PairingBuddyCard(
             IconButton(onClick = onEdit) {
                 Icon(
                     Icons.Default.Edit,
-                    contentDescription = LocalContext.current.getString(R.string.edit_nickname),
+                    contentDescription = context.getString(R.string.edit_nickname),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             IconButton(onClick = onDelete) {
                 Icon(
                     Icons.Default.Delete,
-                    contentDescription = LocalContext.current.getString(R.string.delete_friend),
+                    contentDescription = context.getString(R.string.delete_friend),
                     tint = MaterialTheme.colorScheme.error
                 )
             }
@@ -733,11 +780,15 @@ fun SettingsScreen(viewModel: PanicViewModel) {
     val relayBackendUrl by viewModel.relayBackendUrl.collectAsState()
     var ringtoneName by remember { mutableStateOf("Default") }
     var relayBackendUrlInput by remember(relayBackendUrl) { mutableStateOf(relayBackendUrl) }
+    var showResetDialog by remember { mutableStateOf(false) }
 
     val hasRelayChanges by remember(relayBackendUrlInput, relayBackendUrl) {
         derivedStateOf {
             relayBackendUrlInput.trim().trimEnd('/') != relayBackendUrl.trim().trimEnd('/')
         }
+    }
+    val relayUrlValid by remember(relayBackendUrlInput) {
+        derivedStateOf { isValidRelayUrl(relayBackendUrlInput) }
     }
 
     val versionDisplay = remember {
@@ -773,6 +824,8 @@ fun SettingsScreen(viewModel: PanicViewModel) {
         }
     }
 
+    val relayConfigured = relayBackendUrl.isNotBlank()
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
@@ -786,11 +839,27 @@ fun SettingsScreen(viewModel: PanicViewModel) {
                         .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = context.getString(R.string.settings_general_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                        Text(
+                            text = context.getString(R.string.settings_general_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                     Text(
                         text = context.getString(R.string.about_text),
                         style = MaterialTheme.typography.bodyMedium,
@@ -824,6 +893,30 @@ fun SettingsScreen(viewModel: PanicViewModel) {
                         )
                     }
 
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = if (relayConfigured) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        }
+                    ) {
+                        Text(
+                            text = if (relayConfigured) {
+                                context.getString(R.string.settings_relay_configured)
+                            } else {
+                                context.getString(R.string.settings_relay_not_configured)
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (relayConfigured) {
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+
                     Text(
                         text = context.getString(R.string.settings_relay_section_desc),
                         style = MaterialTheme.typography.bodySmall,
@@ -836,18 +929,27 @@ fun SettingsScreen(viewModel: PanicViewModel) {
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text(context.getString(R.string.relay_url_label)) },
                         placeholder = { Text(context.getString(R.string.relay_url_placeholder)) },
-                        singleLine = true
+                        singleLine = true,
+                        isError = !relayUrlValid
                     )
 
-                    Text(
-                        text = context.getString(R.string.relay_url_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (!relayUrlValid) {
+                        Text(
+                            text = context.getString(R.string.settings_relay_invalid_url),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        Text(
+                            text = context.getString(R.string.relay_url_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
 
                     Button(
                         onClick = { viewModel.setRelayBackendUrl(relayBackendUrlInput) },
-                        enabled = hasRelayChanges,
+                        enabled = hasRelayChanges && relayUrlValid,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(context.getString(R.string.save_relay_url))
@@ -922,7 +1024,7 @@ fun SettingsScreen(viewModel: PanicViewModel) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Settings,
+                            imageVector = Icons.Default.Delete,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.error
                         )
@@ -941,7 +1043,7 @@ fun SettingsScreen(viewModel: PanicViewModel) {
                     )
 
                     OutlinedButton(
-                        onClick = { viewModel.clearPool() },
+                        onClick = { showResetDialog = true },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.error
@@ -966,4 +1068,36 @@ fun SettingsScreen(viewModel: PanicViewModel) {
             )
         }
     }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text(context.getString(R.string.settings_reset_confirm_title)) },
+            text = { Text(context.getString(R.string.settings_reset_confirm_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearPool()
+                    showResetDialog = false
+                }) {
+                    Text(context.getString(R.string.settings_reset_confirm_action))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text(context.getString(R.string.cancel))
+                }
+            }
+        )
+    }
+}
+
+private fun isValidRelayUrl(value: String): Boolean {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return true
+
+    val uri = runCatching { Uri.parse(trimmed) }.getOrNull() ?: return false
+    val scheme = uri.scheme?.lowercase() ?: return false
+    val host = uri.host
+
+    return (scheme == "http" || scheme == "https") && !host.isNullOrBlank()
 }
