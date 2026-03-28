@@ -8,9 +8,11 @@ import android.content.IntentFilter
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class PanicViewModel(application: Application) : AndroidViewModel(application) {
@@ -45,6 +47,61 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     private val nearbyEndpointCount = MutableStateFlow(0)
     private val relayOnlinePeerIds = MutableStateFlow<Set<String>>(emptySet())
 
+    private var relayPresencePollingJob: Job? = null
+    private var isUiActive = false
+    private val appReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                "com.ariel.app.ACKNOWLEDGED" -> {
+                    val id = intent.getStringExtra("ACKNOWLEDGER_NAME") ?: "A friend"
+                    val displayName = _nicknames.value[id] ?: id
+                    Log.d("PanicVM", "ACK received from $id ($displayName)")
+                    _lastAcknowledgment.value = displayName
+
+                    viewModelScope.launch {
+                        delay(5000)
+                        if (_lastAcknowledgment.value == displayName) {
+                            _lastAcknowledgment.value = null
+                        }
+                    }
+                }
+
+                "com.ariel.app.FRIENDS_UPDATED" -> {
+                    refreshFriends()
+                    context?.startService(Intent(context, SirenService::class.java).apply {
+                        action = "START_MONITORING"
+                    })
+                }
+
+                "com.ariel.app.PEER_COUNT_CHANGED" -> {
+                    val count = intent.getIntExtra("COUNT", 0)
+                    val peers = intent.getStringArrayListExtra("PEER_IDS")
+                        ?.map { it.trim() }
+                        ?.filter { it.isNotBlank() }
+                        ?.toSet()
+                        ?: emptySet()
+
+                    Log.d("PanicVM", "Nearby peer update: count=$count peers=$peers")
+                    nearbyEndpointCount.value = count
+                    nearbyPeerIds.value = peers
+                    updateCombinedPeerCount()
+                }
+
+                "com.ariel.app.STATUS_UPDATE" -> {
+                    val statusMsg = intent.getStringExtra("STATUS")
+                    Log.d("PanicVM", "Status update: $statusMsg")
+                    _status.value = statusMsg
+                    viewModelScope.launch {
+                        delay(3000)
+                        if (_status.value == statusMsg) {
+                            _status.value = null
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private val _panicRingtoneUri = MutableStateFlow<String?>(null)
     val panicRingtoneUri = _panicRingtoneUri.asStateFlow()
 
@@ -73,60 +130,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             action = "START_MONITORING"
         })
 
-        startRelayPresencePolling()
+        viewModelScope.launch { refreshRelayPresence() }
 
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                when (intent?.action) {
-                    "com.ariel.app.ACKNOWLEDGED" -> {
-                        val id = intent.getStringExtra("ACKNOWLEDGER_NAME") ?: "A friend"
-                        val displayName = _nicknames.value[id] ?: id
-                        Log.d("PanicVM", "ACK received from $id ($displayName)")
-                        _lastAcknowledgment.value = displayName
-
-                        viewModelScope.launch {
-                            delay(5000)
-                            if (_lastAcknowledgment.value == displayName) {
-                                _lastAcknowledgment.value = null
-                            }
-                        }
-                    }
-
-                    "com.ariel.app.FRIENDS_UPDATED" -> {
-                        refreshFriends()
-                        context?.startService(Intent(context, SirenService::class.java).apply {
-                            action = "START_MONITORING"
-                        })
-                    }
-
-                    "com.ariel.app.PEER_COUNT_CHANGED" -> {
-                        val count = intent.getIntExtra("COUNT", 0)
-                        val peers = intent.getStringArrayListExtra("PEER_IDS")
-                            ?.map { it.trim() }
-                            ?.filter { it.isNotBlank() }
-                            ?.toSet()
-                            ?: emptySet()
-
-                        Log.d("PanicVM", "Nearby peer update: count=$count peers=$peers")
-                        nearbyEndpointCount.value = count
-                        nearbyPeerIds.value = peers
-                        updateCombinedPeerCount()
-                    }
-
-                    "com.ariel.app.STATUS_UPDATE" -> {
-                        val statusMsg = intent.getStringExtra("STATUS")
-                        Log.d("PanicVM", "Status update: $statusMsg")
-                        _status.value = statusMsg
-                        viewModelScope.launch {
-                            delay(3000)
-                            if (_status.value == statusMsg) {
-                                _status.value = null
-                            }
-                        }
-                    }
-                }
-            }
-        }
         val filter = IntentFilter().apply {
             addAction("com.ariel.app.ACKNOWLEDGED")
             addAction("com.ariel.app.FRIENDS_UPDATED")
@@ -134,9 +139,9 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             addAction("com.ariel.app.STATUS_UPDATE")
         }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+            context.registerReceiver(appReceiver, filter, Context.RECEIVER_EXPORTED)
         } else {
-            context.registerReceiver(receiver, filter)
+            context.registerReceiver(appReceiver, filter)
         }
     }
 
@@ -299,13 +304,32 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setUiActive(active: Boolean) {
+        if (isUiActive == active) return
+        isUiActive = active
+
+        if (active) {
+            startRelayPresencePolling()
+        } else {
+            stopRelayPresencePolling()
+        }
+    }
+
     private fun startRelayPresencePolling() {
-        viewModelScope.launch {
-            while (true) {
-                refreshRelayPresence()
+        if (relayPresencePollingJob?.isActive == true) return
+
+        relayPresencePollingJob = viewModelScope.launch {
+            refreshRelayPresence()
+            while (isActive) {
                 delay(PRESENCE_POLL_INTERVAL_MS)
+                refreshRelayPresence()
             }
         }
+    }
+
+    private fun stopRelayPresencePolling() {
+        relayPresencePollingJob?.cancel()
+        relayPresencePollingJob = null
     }
 
     private suspend fun refreshRelayPresence() {
@@ -317,7 +341,11 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         runCatching {
-            RelayBackendClient.fetchPresence(context, friendsSnapshot)
+            RelayBackendClient.fetchPresence(
+                context = context,
+                buddyIds = friendsSnapshot,
+                staleAfterSeconds = PRESENCE_STALE_AFTER_SECONDS
+            )
         }.onSuccess { onlineIds ->
             relayOnlinePeerIds.value = onlineIds.filter { friendsSnapshot.contains(it) }.toSet()
             updateCombinedPeerCount()
@@ -332,9 +360,16 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         _peerCount.value = maxOf(byIds, nearbyEndpointCount.value)
     }
 
+    override fun onCleared() {
+        stopRelayPresencePolling()
+        runCatching { context.unregisterReceiver(appReceiver) }
+        super.onCleared()
+    }
+
     companion object {
         const val PANIC_HOLD_DURATION_MS = 1_500L
-        const val PRESENCE_POLL_INTERVAL_MS = 30_000L
+        const val PRESENCE_POLL_INTERVAL_MS = 120_000L
+        const val PRESENCE_STALE_AFTER_SECONDS = 1_200
         const val ESCALATION_GENERIC = "GENERIC"
         const val ESCALATION_MEDICAL = "MEDICAL"
         const val ESCALATION_ARMED = "ARMED"

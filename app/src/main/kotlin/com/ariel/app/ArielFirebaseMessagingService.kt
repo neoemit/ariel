@@ -17,6 +17,7 @@ class ArielFirebaseMessagingService : FirebaseMessagingService() {
         super.onNewToken(token)
         if (!FirebaseBootstrap.ensureInitialized(applicationContext)) return
         val prefs = getSharedPreferences("ariel_prefs", MODE_PRIVATE)
+        prefs.edit().putString("fcm_token", token).apply()
         val myName = prefs.getString("user_name", null) ?: return
         serviceScope.launch {
             RelayBackendClient.registerDevice(applicationContext, myName, token)

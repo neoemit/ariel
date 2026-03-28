@@ -49,6 +49,9 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import kotlinx.coroutines.delay
 import androidx.core.view.WindowCompat
 import com.ariel.app.ui.theme.ArielTheme
@@ -77,7 +80,28 @@ fun ArielApp(viewModel: PanicViewModel = viewModel()) {
     // always start on the Panic tab; not saved across restarts or recompositions
     var selectedTab by remember { mutableStateOf(0) } // 0=Panic,1=Pairing,2=Settings
     val context = LocalContext.current
-    
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner, viewModel) {
+        viewModel.setUiActive(
+            lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        )
+
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> viewModel.setUiActive(true)
+                Lifecycle.Event.ON_STOP -> viewModel.setUiActive(false)
+                else -> Unit
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.setUiActive(false)
+        }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->

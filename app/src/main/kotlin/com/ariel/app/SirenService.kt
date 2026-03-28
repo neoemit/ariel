@@ -33,7 +33,8 @@ class SirenService : Service() {
     private val monitorChannelId = "MonitorChannel"
     private val notificationId = 1001
     private val monitorNotificationId = 1002
-    private val relayHeartbeatIntervalMs = 60_000L
+    private val relayHeartbeatIntervalMs = 10 * 60_000L
+    private val relayRegistrationMinIntervalMs = 10 * 60_000L
 
     private var nearbyManager: NearbyManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -43,6 +44,8 @@ class SirenService : Service() {
     private val handledAckIds = LinkedHashSet<String>()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var relayHeartbeatJob: Job? = null
+    private var cachedFcmToken: String? = null
+    private var lastRelayRegistrationAtMs: Long = 0L
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
@@ -55,7 +58,7 @@ class SirenService : Service() {
             }
 
             "SYNC_PUSH_REGISTRATION" -> {
-                syncPushRegistration()
+                syncPushRegistration(force = true)
             }
 
             "STOP_SIREN" -> {
@@ -121,8 +124,10 @@ class SirenService : Service() {
     }
 
     private fun startMonitoring() {
+        val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
+        cachedFcmToken = cachedFcmToken ?: prefs.getString(PREF_FCM_TOKEN, null)
+
         if (nearbyManager == null) {
-            val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
             val myName = getOrCreateMyName(prefs)
 
             nearbyManager = NearbyManager(this, myName).apply {
@@ -158,7 +163,7 @@ class SirenService : Service() {
         }
 
         showMonitorNotification()
-        syncPushRegistration()
+        syncPushRegistration(force = false)
         startRelayHeartbeat()
     }
 
@@ -170,7 +175,7 @@ class SirenService : Service() {
         }
     }
 
-    private fun syncPushRegistration() {
+    private fun syncPushRegistration(force: Boolean) {
         val backendUrl = RelayBackendClient.getBackendUrl(this) ?: return
         if (backendUrl.isBlank()) return
         if (!FirebaseBootstrap.ensureInitialized(this)) return
@@ -178,12 +183,19 @@ class SirenService : Service() {
         val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
         val myName = getOrCreateMyName(prefs)
 
+        val cachedToken = cachedFcmToken ?: prefs.getString(PREF_FCM_TOKEN, null)
+        if (!cachedToken.isNullOrBlank()) {
+            cachedFcmToken = cachedToken
+            registerTokenIfNeeded(myName = myName, token = cachedToken, force = force)
+            return
+        }
+
         runCatching {
             FirebaseMessaging.getInstance().token
                 .addOnSuccessListener { token ->
-                    serviceScope.launch {
-                        RelayBackendClient.registerDevice(this@SirenService, myName, token)
-                    }
+                    cachedFcmToken = token
+                    prefs.edit().putString(PREF_FCM_TOKEN, token).apply()
+                    registerTokenIfNeeded(myName = myName, token = token, force = true)
                 }
                 .addOnFailureListener { error ->
                     Log.w("ArielService", "FCM token fetch failed: ${error.message}")
@@ -193,13 +205,25 @@ class SirenService : Service() {
         }
     }
 
+    private fun registerTokenIfNeeded(myName: String, token: String, force: Boolean) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastRelayRegistrationAtMs < relayRegistrationMinIntervalMs) {
+            return
+        }
+
+        lastRelayRegistrationAtMs = now
+        serviceScope.launch {
+            RelayBackendClient.registerDevice(this@SirenService, myName, token)
+        }
+    }
+
     private fun startRelayHeartbeat() {
         if (relayHeartbeatJob?.isActive == true) return
 
         relayHeartbeatJob = serviceScope.launch {
             while (isActive) {
-                syncPushRegistration()
                 delay(relayHeartbeatIntervalMs)
+                syncPushRegistration(force = false)
             }
         }
     }
@@ -468,6 +492,10 @@ class SirenService : Service() {
             .build()
 
         notificationManager.notify(2001, notification)
+    }
+
+    companion object {
+        private const val PREF_FCM_TOKEN = "fcm_token"
     }
 
     override fun onDestroy() {
