@@ -1,4 +1,4 @@
-package com.ariel.app
+package com.thomaslamendola.ariel
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -149,7 +149,7 @@ class SirenService : Service() {
                         prefs.edit().putStringSet("friends", currentFriends).apply()
                         Log.d("ArielService", "Added $friendName to friends via reciprocal pairing")
                         addFriend(friendName)
-                        val updateIntent = Intent("com.ariel.app.FRIENDS_UPDATED").apply {
+                        val updateIntent = Intent("com.thomaslamendola.ariel.FRIENDS_UPDATED").apply {
                             setPackage(packageName)
                         }
                         sendBroadcast(updateIntent)
@@ -284,7 +284,7 @@ class SirenService : Service() {
         }
 
         showAckNotification(acknowledger)
-        val intent = Intent("com.ariel.app.ACKNOWLEDGED").apply {
+        val intent = Intent("com.thomaslamendola.ariel.ACKNOWLEDGED").apply {
             putExtra("ACKNOWLEDGER_NAME", acknowledger)
             setPackage(packageName)
         }
@@ -402,7 +402,7 @@ class SirenService : Service() {
         currentPanicSender = null
         currentPanicEventId = null
 
-        val ackIntent = Intent("com.ariel.app.ACKNOWLEDGED").apply {
+        val ackIntent = Intent("com.thomaslamendola.ariel.ACKNOWLEDGED").apply {
             setPackage(packageName)
         }
         sendBroadcast(ackIntent)

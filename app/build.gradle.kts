@@ -20,13 +20,13 @@ fun escapedLocalProperty(key: String): String {
 }
 
 android {
-    namespace = "com.ariel.app"
+    namespace = "com.thomaslamendola.ariel"
     compileSdk = 34
 
     val appVersionMinor = 15
 
     defaultConfig {
-        applicationId = "com.ariel.app"
+        applicationId = "com.thomaslamendola.ariel"
         minSdk = 26
         targetSdk = 34
         versionCode = appVersionMinor

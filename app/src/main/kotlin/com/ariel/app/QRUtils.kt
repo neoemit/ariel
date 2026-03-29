@@ -1,4 +1,4 @@
-package com.ariel.app
+package com.thomaslamendola.ariel
 
 import android.graphics.Bitmap
 import android.graphics.Color

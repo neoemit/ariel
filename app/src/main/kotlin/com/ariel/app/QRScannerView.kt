@@ -1,4 +1,4 @@
-package com.ariel.app
+package com.thomaslamendola.ariel
 
 import android.annotation.SuppressLint
 import androidx.camera.core.*

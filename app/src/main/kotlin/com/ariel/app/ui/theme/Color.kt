@@ -1,4 +1,4 @@
-package com.ariel.app.ui.theme
+package com.thomaslamendola.ariel.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
@@ -8,4 +8,3 @@ val ArielRedDark = Color(0xFFB71C1C)
 val ArielOnRed = Color(0xFFFFFFFF)
 val SurfaceDim = Color(0xFF121212)
 val SurfaceBright = Color(0xFFFFFFFF)
-

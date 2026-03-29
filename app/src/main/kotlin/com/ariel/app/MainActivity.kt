@@ -1,4 +1,4 @@
-package com.ariel.app
+package com.thomaslamendola.ariel
 
 import android.Manifest
 import android.os.Bundle
@@ -54,7 +54,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import kotlinx.coroutines.delay
 import androidx.core.view.WindowCompat
-import com.ariel.app.ui.theme.ArielTheme
+import com.thomaslamendola.ariel.ui.theme.ArielTheme
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
 import kotlin.math.atan2

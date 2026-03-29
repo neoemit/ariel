@@ -56,7 +56,7 @@ def panic():
         '-s', device_id, 'shell', 'am', 'start-foreground-service',
         '-a', 'SIMULATED_PANIC',
         '--es', 'SENDER_NAME', 'VirtualBuddy_01',
-        '-n', 'com.ariel.app/.SirenService'
+        '-n', 'com.thomaslamendola.ariel/.SirenService'
     ]
     output = run_adb(cmd)
     if "Error" in output or "Exception" in output:
@@ -67,7 +67,7 @@ def panic():
 def stop():
     device_id = get_device()
     if not device_id: return
-    run_adb(['-s', device_id, 'shell', 'am', 'start-foreground-service', '-a', 'STOP_SIREN', '-n', 'com.ariel.app/.SirenService'])
+    run_adb(['-s', device_id, 'shell', 'am', 'start-foreground-service', '-a', 'STOP_SIREN', '-n', 'com.thomaslamendola.ariel/.SirenService'])
     print("Siren Stop Signal Sent.")
 
 def monitor():
@@ -107,7 +107,7 @@ def monitor():
                     run_adb(['-s', device_id, 'shell', 'am', 'start-foreground-service', 
                            '-a', 'SIMULATED_ACK', 
                            '--es', 'SENDER_NAME', 'VirtualBuddy_01',
-                           '-n', 'com.ariel.app/.SirenService'])
+                           '-n', 'com.thomaslamendola.ariel/.SirenService'])
                     print("\nAcknowledge signal sent!")
                 elif choice == 'S':
                     stop()

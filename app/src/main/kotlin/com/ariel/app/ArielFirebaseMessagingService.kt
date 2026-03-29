@@ -1,4 +1,4 @@
-package com.ariel.app
+package com.thomaslamendola.ariel
 
 import android.content.Intent
 import android.os.Build

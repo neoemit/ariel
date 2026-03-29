@@ -1,4 +1,4 @@
-package com.ariel.app
+package com.thomaslamendola.ariel
 
 import android.app.Application
 import android.content.BroadcastReceiver
@@ -52,7 +52,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     private val appReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                "com.ariel.app.ACKNOWLEDGED" -> {
+                "com.thomaslamendola.ariel.ACKNOWLEDGED" -> {
                     val id = intent.getStringExtra("ACKNOWLEDGER_NAME") ?: "A friend"
                     val displayName = _nicknames.value[id] ?: id
                     Log.d("PanicVM", "ACK received from $id ($displayName)")
@@ -66,14 +66,14 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-                "com.ariel.app.FRIENDS_UPDATED" -> {
+                "com.thomaslamendola.ariel.FRIENDS_UPDATED" -> {
                     refreshFriends()
                     context?.startService(Intent(context, SirenService::class.java).apply {
                         action = "START_MONITORING"
                     })
                 }
 
-                "com.ariel.app.PEER_COUNT_CHANGED" -> {
+                "com.thomaslamendola.ariel.PEER_COUNT_CHANGED" -> {
                     val count = intent.getIntExtra("COUNT", 0)
                     val peers = intent.getStringArrayListExtra("PEER_IDS")
                         ?.map { it.trim() }
@@ -87,7 +87,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
                     updateCombinedPeerCount()
                 }
 
-                "com.ariel.app.STATUS_UPDATE" -> {
+                "com.thomaslamendola.ariel.STATUS_UPDATE" -> {
                     val statusMsg = intent.getStringExtra("STATUS")
                     Log.d("PanicVM", "Status update: $statusMsg")
                     _status.value = statusMsg
@@ -131,10 +131,10 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { refreshRelayPresence() }
 
         val filter = IntentFilter().apply {
-            addAction("com.ariel.app.ACKNOWLEDGED")
-            addAction("com.ariel.app.FRIENDS_UPDATED")
-            addAction("com.ariel.app.PEER_COUNT_CHANGED")
-            addAction("com.ariel.app.STATUS_UPDATE")
+            addAction("com.thomaslamendola.ariel.ACKNOWLEDGED")
+            addAction("com.thomaslamendola.ariel.FRIENDS_UPDATED")
+            addAction("com.thomaslamendola.ariel.PEER_COUNT_CHANGED")
+            addAction("com.thomaslamendola.ariel.STATUS_UPDATE")
         }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             context.registerReceiver(appReceiver, filter, Context.RECEIVER_EXPORTED)

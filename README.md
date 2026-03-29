@@ -43,7 +43,7 @@ To install and launch on a specific device (replace `<ID>` with the ID from `adb
 adb -s <ID> install -r app/build/outputs/apk/debug/app-debug.apk
 
 # Launch App
-adb -s <ID> shell am start -n com.ariel.app/com.ariel.app.MainActivity
+adb -s <ID> shell am start -n com.thomaslamendola.ariel/com.thomaslamendola.ariel.MainActivity
 ```
 
 ### 4. Build Release APK (For Distribution)

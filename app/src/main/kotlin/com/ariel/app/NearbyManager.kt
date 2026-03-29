@@ -1,4 +1,4 @@
-package com.ariel.app
+package com.thomaslamendola.ariel
 
 import android.content.Context
 import android.content.Intent
@@ -24,7 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class NearbyManager(private val context: Context, val myName: String) {
     private val tag = "NearbyManager"
     private val strategy = Strategy.P2P_CLUSTER
-    private val serviceId = "com.ariel.app.PANIC_SERVICE"
+    private val serviceId = "com.thomaslamendola.ariel.PANIC_SERVICE"
     private val reconnectDelayMs = 15_000L
     private val dutyCycleScanMs = 15_000L
     private val dutyCycleSleepMs = 45_000L
@@ -172,7 +172,7 @@ class NearbyManager(private val context: Context, val myName: String) {
     }
 
     private fun notifyStatus(status: String) {
-        val intent = Intent("com.ariel.app.STATUS_UPDATE").apply {
+        val intent = Intent("com.thomaslamendola.ariel.STATUS_UPDATE").apply {
             putExtra("STATUS", status)
             setPackage(context.packageName)
         }
@@ -318,7 +318,7 @@ class NearbyManager(private val context: Context, val myName: String) {
         val count = _peers.value.size
         val connectedPeerIds = ArrayList(nameToEndpoint.keys)
         Log.d(tag, "Notifying peer count change: count=$count peers=$connectedPeerIds")
-        val intent = Intent("com.ariel.app.PEER_COUNT_CHANGED").apply {
+        val intent = Intent("com.thomaslamendola.ariel.PEER_COUNT_CHANGED").apply {
             putExtra("COUNT", count)
             putStringArrayListExtra("PEER_IDS", connectedPeerIds)
             setPackage(context.packageName)

@@ -1,4 +1,4 @@
-package com.ariel.app.ui.theme
+package com.thomaslamendola.ariel.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -45,4 +45,3 @@ fun ArielTheme(
         content = content
     )
 }
-
