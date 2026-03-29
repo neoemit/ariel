@@ -21,14 +21,14 @@ fun escapedLocalProperty(key: String): String {
 
 android {
     namespace = "com.thomaslamendola.ariel"
-    compileSdk = 34
+    compileSdk = 35
 
-    val appVersionMinor = 15
+    val appVersionMinor = 17
 
     defaultConfig {
         applicationId = "com.thomaslamendola.ariel"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 35
         versionCode = appVersionMinor
         versionName = "1.$appVersionMinor"
         buildConfigField("String", "FIREBASE_API_KEY", "\"${escapedLocalProperty("firebase.apiKey")}\"")
@@ -45,6 +45,9 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            ndk {
+                debugSymbolLevel = "SYMBOL_TABLE"
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
