@@ -102,7 +102,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private val _panicRingtoneUri = MutableStateFlow<String?>(null)
+    private val _panicRingtoneUri = MutableStateFlow(prefs.getString("panic_ringtone", null))
     val panicRingtoneUri = _panicRingtoneUri.asStateFlow()
 
     private val _nicknames = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -111,7 +111,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedEscalation = MutableStateFlow(ESCALATION_GENERIC)
     val selectedEscalation = _selectedEscalation.asStateFlow()
 
-    private val _relayBackendUrl = MutableStateFlow("")
+    private val _relayBackendUrl = MutableStateFlow(RelayBackendClient.getBackendUrl(context).orEmpty())
     val relayBackendUrl = _relayBackendUrl.asStateFlow()
 
     init {
@@ -123,8 +123,6 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             prefs.getString("nickname_$id", null)?.let { currentNicknames[id] = it }
         }
         _nicknames.value = currentNicknames
-        _panicRingtoneUri.value = prefs.getString("panic_ringtone", null)
-        _relayBackendUrl.value = RelayBackendClient.getBackendUrl(context).orEmpty()
 
         context.startService(Intent(context, SirenService::class.java).apply {
             action = "START_MONITORING"

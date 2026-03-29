@@ -802,7 +802,15 @@ fun SettingsScreen(viewModel: PanicViewModel) {
     val context = LocalContext.current
     val ringtoneUri by viewModel.panicRingtoneUri.collectAsState()
     val relayBackendUrl by viewModel.relayBackendUrl.collectAsState()
-    var ringtoneName by remember { mutableStateOf("Default") }
+    val ringtoneName = remember(ringtoneUri) {
+        if (ringtoneUri == null) {
+            "Default"
+        } else {
+            RingtoneManager.getRingtone(context, Uri.parse(ringtoneUri))
+                ?.getTitle(context)
+                ?: "Unknown"
+        }
+    }
     var relayBackendUrlInput by remember(relayBackendUrl) { mutableStateOf(relayBackendUrl) }
     var showResetDialog by remember { mutableStateOf(false) }
 
@@ -827,16 +835,6 @@ fun SettingsScreen(viewModel: PanicViewModel) {
             }
             "${info.versionName} ($code)"
         }.getOrDefault("Unknown")
-    }
-
-    LaunchedEffect(ringtoneUri) {
-        ringtoneName = if (ringtoneUri == null) {
-            "Default"
-        } else {
-            RingtoneManager.getRingtone(context, Uri.parse(ringtoneUri))
-                ?.getTitle(context)
-                ?: "Unknown"
-        }
     }
 
     val ringtoneLauncher = rememberLauncherForActivityResult(

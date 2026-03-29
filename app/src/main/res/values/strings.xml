@@ -51,7 +51,7 @@
     <string name="version_display">Version %1$s</string>
     <string name="relay_url_title">Internet Relay</string>
     <string name="relay_url_label">Relay Backend URL</string>
-    <string name="relay_url_placeholder">https://your-relay-host</string>
+    <string name="relay_url_placeholder">https://ariel.lmbdev.co.za</string>
     <string name="relay_url_hint">Set this to your Docker relay URL so alerts work over mobile/internet range.</string>
     <string name="save_relay_url">SAVE RELAY URL</string>
     <string name="settings_general_title">App preferences</string>

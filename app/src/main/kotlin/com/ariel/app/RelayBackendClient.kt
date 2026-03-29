@@ -13,13 +13,14 @@ object RelayBackendClient {
     private const val TAG = "RelayBackendClient"
     private const val PREFS_NAME = "ariel_prefs"
     private const val PREF_RELAY_URL = "relay_backend_url"
+    private const val DEFAULT_BACKEND_URL = "https://ariel.lmbdev.co.za"
     private const val CONNECT_TIMEOUT_MS = 7_000
     private const val READ_TIMEOUT_MS = 7_000
 
     fun getBackendUrl(context: Context): String? {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val configured = prefs.getString(PREF_RELAY_URL, null)?.trim().orEmpty()
-        if (configured.isBlank()) return null
+        if (configured.isBlank()) return DEFAULT_BACKEND_URL
         return configured.trimEnd('/')
     }
 
