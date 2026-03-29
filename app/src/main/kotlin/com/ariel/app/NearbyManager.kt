@@ -304,9 +304,7 @@ class NearbyManager(private val context: Context, val myName: String) {
             val payload = Payload.fromBytes("ACK:$myName".toByteArray())
             connectionsClient.sendPayload(endpointId, payload)
         } else {
-            Log.w(tag, "Could not send ACK: no endpoint for $targetName. Broadcasting to all peers.")
-            val payload = Payload.fromBytes("ACK:$myName".toByteArray())
-            _peers.value.forEach { id -> connectionsClient.sendPayload(id, payload) }
+            Log.w(tag, "Skipping Nearby ACK for $targetName: no direct endpoint mapping. Relay ACK path will handle remote delivery when configured.")
         }
     }
 
