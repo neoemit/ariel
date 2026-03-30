@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -138,11 +139,12 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             addAction("com.thomaslamendola.ariel.PEER_COUNT_CHANGED")
             addAction("com.thomaslamendola.ariel.STATUS_UPDATE")
         }
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(appReceiver, filter, Context.RECEIVER_EXPORTED)
-        } else {
-            context.registerReceiver(appReceiver, filter)
-        }
+        ContextCompat.registerReceiver(
+            context,
+            appReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
     }
 
     fun startPairing() {
