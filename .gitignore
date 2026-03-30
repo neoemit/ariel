@@ -1,5 +1,6 @@
 # Android / Gradle
 .gradle/
+gradle/gradle-daemon-jvm.properties
 **/build/
 **/outputs/
 *.apk
