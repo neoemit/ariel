@@ -1,10 +1,16 @@
 # Android / Gradle
 .gradle/
 **/build/
+**/outputs/
 *.apk
+*.aab
+*.apks
 *.aar
 .cxx/
 captures/
+app/release/
+app/debug/
+app/profile/
 
 # IDE
 .idea/
