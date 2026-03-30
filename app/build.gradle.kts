@@ -23,11 +23,11 @@ android {
     namespace = "com.thomaslamendola.ariel"
     compileSdk = 35
 
-    val appVersionMinor = 19
+    val appVersionMinor = 21
 
     defaultConfig {
         applicationId = "com.thomaslamendola.ariel"
-        minSdk = 26
+        minSdk = 31
         targetSdk = 35
         versionCode = appVersionMinor
         versionName = "1.$appVersionMinor"

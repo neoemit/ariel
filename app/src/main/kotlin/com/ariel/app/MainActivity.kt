@@ -1,13 +1,17 @@
 package com.thomaslamendola.ariel
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.media.RingtoneManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
-import android.net.Uri
-import android.media.RingtoneManager
 import android.view.MotionEvent
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -21,9 +25,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
@@ -38,25 +42,23 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import android.content.Context
-import android.app.Activity
-import android.content.Intent
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import kotlinx.coroutines.delay
-import androidx.core.view.WindowCompat
-import com.thomaslamendola.ariel.ui.theme.ArielTheme
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.thomaslamendola.ariel.ui.theme.ArielTheme
+import kotlinx.coroutines.delay
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -75,12 +77,82 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+data class PermissionGroup(
+    val labelRes: Int,
+    val permissions: List<String>,
+)
+
+private fun requiredPermissionGroups(): List<PermissionGroup> {
+    val groups = mutableListOf<PermissionGroup>()
+
+    groups += PermissionGroup(
+        labelRes = R.string.permission_group_nearby_bluetooth,
+        permissions = listOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_ADVERTISE,
+            Manifest.permission.BLUETOOTH_CONNECT,
+        )
+    )
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        groups += PermissionGroup(
+            labelRes = R.string.permission_group_nearby_wifi,
+            permissions = listOf(Manifest.permission.NEARBY_WIFI_DEVICES)
+        )
+        groups += PermissionGroup(
+            labelRes = R.string.permission_group_notifications,
+            permissions = listOf(Manifest.permission.POST_NOTIFICATIONS)
+        )
+    }
+
+    groups += PermissionGroup(
+        labelRes = R.string.permission_group_camera,
+        permissions = listOf(Manifest.permission.CAMERA)
+    )
+
+    return groups
+}
+
+private fun findMissingPermissions(context: Context, permissions: List<String>): List<String> {
+    return permissions.filter { permission ->
+        ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
+    }
+}
+
 @Composable
 fun ArielApp(viewModel: PanicViewModel = viewModel()) {
     // always start on the Panic tab; not saved across restarts or recompositions
     var selectedTab by remember { mutableStateOf(0) } // 0=Panic,1=Pairing,2=Settings
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val permissionGroups = remember { requiredPermissionGroups() }
+    val requiredPermissions = remember(permissionGroups) { permissionGroups.flatMap { it.permissions } }
+    var missingPermissions by remember {
+        mutableStateOf(findMissingPermissions(context, requiredPermissions))
+    }
+
+    fun refreshPermissions() {
+        missingPermissions = findMissingPermissions(context, requiredPermissions)
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ ->
+        refreshPermissions()
+    }
+
+    val requestPermissions: () -> Unit = {
+        if (requiredPermissions.isNotEmpty()) {
+            permissionLauncher.launch(requiredPermissions.toTypedArray())
+        }
+    }
+
+    val openAppSettings: () -> Unit = {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", context.packageName, null)
+        }
+        context.startActivity(intent)
+    }
 
     DisposableEffect(lifecycleOwner, viewModel) {
         viewModel.setUiActive(
@@ -89,7 +161,10 @@ fun ArielApp(viewModel: PanicViewModel = viewModel()) {
 
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> viewModel.setUiActive(true)
+                Lifecycle.Event.ON_START -> {
+                    viewModel.setUiActive(true)
+                    refreshPermissions()
+                }
                 Lifecycle.Event.ON_STOP -> viewModel.setUiActive(false)
                 else -> Unit
             }
@@ -102,43 +177,24 @@ fun ArielApp(viewModel: PanicViewModel = viewModel()) {
         }
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        if (permissions.values.all { it }) {
-            viewModel.startPairing()
-        } else {
-            Toast.makeText(context, "Permissions required for pairing", Toast.LENGTH_SHORT).show()
-        }
-    }
-
     LaunchedEffect(Unit) {
-        permissionLauncher.launch(arrayOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.BLUETOOTH_ADVERTISE,
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.NEARBY_WIFI_DEVICES,
-            Manifest.permission.CAMERA,
-            Manifest.permission.POST_NOTIFICATIONS
-        ))
-
-        // Check if Location is enabled
-        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
-        val gpsEnabled = locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
-        val networkEnabled = locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
-        if (!gpsEnabled && !networkEnabled) {
-            Toast.makeText(context, "PLEASE ENABLE LOCATION SERVICES (GPS) in system settings!", Toast.LENGTH_LONG).show()
+        refreshPermissions()
+        if (missingPermissions.isNotEmpty()) {
+            requestPermissions()
         }
 
-        // Request battery optimization ignore for "Never Sleep" functionality
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         if (!powerManager.isIgnoringBatteryOptimizations(context.packageName)) {
             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                 data = Uri.parse("package:${context.packageName}")
             }
             context.startActivity(intent)
+        }
+    }
+
+    LaunchedEffect(missingPermissions) {
+        if (missingPermissions.isEmpty()) {
+            viewModel.startPairing()
         }
     }
 
@@ -174,9 +230,25 @@ fun ArielApp(viewModel: PanicViewModel = viewModel()) {
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when (selectedTab) {
-                0 -> PanicScreen(viewModel)
-                1 -> PairingScreen(viewModel)
-                2 -> SettingsScreen(viewModel)
+                0 -> PanicScreen(
+                    viewModel = viewModel,
+                    missingPermissions = missingPermissions,
+                    onRequestPermissions = requestPermissions,
+                    onOpenAppSettings = openAppSettings
+                )
+                1 -> PairingScreen(
+                    viewModel = viewModel,
+                    missingPermissions = missingPermissions,
+                    onRequestPermissions = requestPermissions,
+                    onOpenAppSettings = openAppSettings
+                )
+                2 -> SettingsScreen(
+                    viewModel = viewModel,
+                    permissionGroups = permissionGroups,
+                    missingPermissions = missingPermissions,
+                    onRequestPermissions = requestPermissions,
+                    onOpenAppSettings = openAppSettings
+                )
             }
 
             val ack by viewModel.lastAcknowledgment.collectAsState()
@@ -189,14 +261,196 @@ fun ArielApp(viewModel: PanicViewModel = viewModel()) {
     }
 }
 
+private fun permissionLabel(context: Context, permission: String): String {
+    return when (permission) {
+        Manifest.permission.BLUETOOTH_SCAN,
+        Manifest.permission.BLUETOOTH_ADVERTISE,
+        Manifest.permission.BLUETOOTH_CONNECT -> context.getString(R.string.permission_group_nearby_bluetooth)
+        Manifest.permission.NEARBY_WIFI_DEVICES -> context.getString(R.string.permission_group_nearby_wifi)
+        Manifest.permission.POST_NOTIFICATIONS -> context.getString(R.string.permission_group_notifications)
+        Manifest.permission.CAMERA -> context.getString(R.string.permission_group_camera)
+        else -> permission
+    }
+}
+
 @Composable
-fun PanicScreen(viewModel: PanicViewModel) {
+private fun PermissionBlockedScreen(
+    title: String,
+    description: String,
+    missingPermissions: List<String>,
+    onRequestPermissions: () -> Unit,
+    onOpenAppSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val missingLabels = remember(missingPermissions) {
+        missingPermissions.map { permissionLabel(context, it) }.distinct()
+    }
+
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        ElevatedCard(
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = context.getString(R.string.permissions_missing_count, missingLabels.size),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.error
+                )
+                missingLabels.forEach { label ->
+                    Text(
+                        text = "• $label",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                Button(
+                    onClick = onRequestPermissions,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(context.getString(R.string.permissions_action_grant))
+                }
+                OutlinedButton(
+                    onClick = onOpenAppSettings,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(context.getString(R.string.permissions_action_open_settings))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PermissionStatusCard(
+    permissionGroups: List<PermissionGroup>,
+    missingPermissions: List<String>,
+    onRequestPermissions: () -> Unit,
+    onOpenAppSettings: () -> Unit,
+) {
+    val context = LocalContext.current
+    val missingSet = remember(missingPermissions) { missingPermissions.toSet() }
+    val allGranted = missingPermissions.isEmpty()
+
+    ElevatedCard(shape = RoundedCornerShape(20.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = context.getString(R.string.permissions_section_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Text(
+                text = context.getString(R.string.permissions_section_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            permissionGroups.forEach { group ->
+                val granted = group.permissions.all { permission -> permission !in missingSet }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = context.getString(group.labelRes),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = if (granted) {
+                            context.getString(R.string.permissions_status_granted)
+                        } else {
+                            context.getString(R.string.permissions_status_not_granted)
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (granted) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        }
+                    )
+                }
+            }
+
+            if (!allGranted) {
+                Button(
+                    onClick = onRequestPermissions,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(context.getString(R.string.permissions_action_grant))
+                }
+                OutlinedButton(
+                    onClick = onOpenAppSettings,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(context.getString(R.string.permissions_action_open_settings))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PanicScreen(
+    viewModel: PanicViewModel,
+    missingPermissions: List<String>,
+    onRequestPermissions: () -> Unit,
+    onOpenAppSettings: () -> Unit
+) {
     val ctx = LocalContext.current
     val progress by viewModel.panicTriggerProgress.collectAsState()
     val isTriggered by viewModel.isPanicTriggered.collectAsState()
     var isPressed by remember { mutableStateOf(false) }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val selectedEscalation by viewModel.selectedEscalation.collectAsState()
+
+    if (missingPermissions.isNotEmpty()) {
+        PermissionBlockedScreen(
+            title = ctx.getString(R.string.permissions_required_title),
+            description = ctx.getString(R.string.permissions_required_panic_desc),
+            missingPermissions = missingPermissions,
+            onRequestPermissions = onRequestPermissions,
+            onOpenAppSettings = onOpenAppSettings,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+        )
+        return
+    }
 
     LaunchedEffect(isPressed) {
         viewModel.setPressed(isPressed)
@@ -498,7 +752,12 @@ private fun resolveEscalationForTouch(x: Float, y: Float, size: IntSize): String
 }
 
 @Composable
-fun PairingScreen(viewModel: PanicViewModel) {
+fun PairingScreen(
+    viewModel: PanicViewModel,
+    missingPermissions: List<String>,
+    onRequestPermissions: () -> Unit,
+    onOpenAppSettings: () -> Unit
+) {
     val context = LocalContext.current
     val friends by viewModel.friends.collectAsState()
     val nicknames by viewModel.nicknames.collectAsState()
@@ -509,6 +768,20 @@ fun PairingScreen(viewModel: PanicViewModel) {
 
     val myName = viewModel.myName
     val qrBitmap = remember(myName) { QRUtils.generateQRCode(myName) }
+
+    if (missingPermissions.isNotEmpty()) {
+        PermissionBlockedScreen(
+            title = context.getString(R.string.permissions_required_title),
+            description = context.getString(R.string.permissions_required_pairing_desc),
+            missingPermissions = missingPermissions,
+            onRequestPermissions = onRequestPermissions,
+            onOpenAppSettings = onOpenAppSettings,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp)
+        )
+        return
+    }
 
     if (isScanning) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -798,7 +1071,13 @@ private fun PairingBuddyCard(
 }
 
 @Composable
-fun SettingsScreen(viewModel: PanicViewModel) {
+fun SettingsScreen(
+    viewModel: PanicViewModel,
+    permissionGroups: List<PermissionGroup>,
+    missingPermissions: List<String>,
+    onRequestPermissions: () -> Unit,
+    onOpenAppSettings: () -> Unit
+) {
     val context = LocalContext.current
     val ringtoneUri by viewModel.panicRingtoneUri.collectAsState()
     val relayBackendUrl by viewModel.relayBackendUrl.collectAsState()
@@ -889,6 +1168,15 @@ fun SettingsScreen(viewModel: PanicViewModel) {
                     )
                 }
             }
+        }
+
+        item {
+            PermissionStatusCard(
+                permissionGroups = permissionGroups,
+                missingPermissions = missingPermissions,
+                onRequestPermissions = onRequestPermissions,
+                onOpenAppSettings = onOpenAppSettings
+            )
         }
 
         item {
