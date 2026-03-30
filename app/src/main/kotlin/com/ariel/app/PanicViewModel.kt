@@ -115,7 +115,9 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     val relayBackendUrl = _relayBackendUrl.asStateFlow()
 
     init {
-        val savedFriends = prefs.getStringSet("friends", emptySet()) ?: emptySet()
+        val savedFriends = persistSanitizedFriends(
+            prefs.getStringSet("friends", emptySet()) ?: emptySet()
+        )
         _friends.value = savedFriends.toList()
 
         val currentNicknames = mutableMapOf<String, String>()
@@ -162,35 +164,39 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addFriend(name: String) {
-        if (name == myName) return
+        val normalizedName = name.trim()
+        if (normalizedName.isBlank()) return
+        if (normalizedName.equals(myName, ignoreCase = true)) return
         val currentFriends = _friends.value.toMutableSet()
-        if (currentFriends.add(name)) {
+        if (currentFriends.add(normalizedName)) {
             _friends.value = currentFriends.toList()
             prefs.edit().putStringSet("friends", currentFriends).apply()
             context.startService(Intent(context, SirenService::class.java).apply {
                 action = "ADD_FRIEND"
-                putExtra("FRIEND_NAME", name)
+                putExtra("FRIEND_NAME", normalizedName)
             })
             viewModelScope.launch { refreshRelayPresence() }
         }
     }
 
     fun removeFriend(name: String) {
+        val normalizedName = name.trim()
+        if (normalizedName.isBlank()) return
         val currentFriends = _friends.value.toMutableSet()
-        if (currentFriends.remove(name)) {
+        if (currentFriends.remove(normalizedName)) {
             _friends.value = currentFriends.toList()
             prefs.edit()
                 .putStringSet("friends", currentFriends)
-                .remove("nickname_$name")
+                .remove("nickname_$normalizedName")
                 .apply()
 
             val currentNicknames = _nicknames.value.toMutableMap()
-            currentNicknames.remove(name)
+            currentNicknames.remove(normalizedName)
             _nicknames.value = currentNicknames
 
             context.startService(Intent(context, SirenService::class.java).apply {
                 action = "REMOVE_FRIEND"
-                putExtra("FRIEND_NAME", name)
+                putExtra("FRIEND_NAME", normalizedName)
             })
             viewModelScope.launch { refreshRelayPresence() }
         }
@@ -288,7 +294,9 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun refreshFriends() {
-        val savedFriends = prefs.getStringSet("friends", emptySet()) ?: emptySet()
+        val savedFriends = persistSanitizedFriends(
+            prefs.getStringSet("friends", emptySet()) ?: emptySet()
+        )
         _friends.value = savedFriends.toList()
 
         val currentNicknames = mutableMapOf<String, String>()
@@ -356,6 +364,22 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     private fun updateCombinedPeerCount() {
         val byIds = (nearbyPeerIds.value + relayOnlinePeerIds.value).size
         _peerCount.value = maxOf(byIds, nearbyEndpointCount.value)
+    }
+
+    private fun persistSanitizedFriends(rawFriends: Set<String>): Set<String> {
+        val sanitized = rawFriends
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.equals(myName, ignoreCase = true) }
+            .toSet()
+
+        if (sanitized != rawFriends) {
+            prefs.edit()
+                .putStringSet("friends", sanitized)
+                .remove("nickname_$myName")
+                .apply()
+        }
+
+        return sanitized
     }
 
     override fun onCleared() {

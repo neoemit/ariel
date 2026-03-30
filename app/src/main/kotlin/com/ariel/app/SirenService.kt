@@ -140,21 +140,6 @@ class SirenService : Service() {
                     Log.d("ArielService", "ACK RECEIVED FROM $acknowledger")
                     handleIncomingAcknowledge(acknowledger, null)
                 }
-
-                onPairingReceived = { friendName ->
-                    Log.d("ArielService", "Reciprocal pairing request from $friendName")
-                    val currentFriends = prefs.getStringSet("friends", emptySet())?.toMutableSet() ?: mutableSetOf()
-                    if (!currentFriends.contains(friendName)) {
-                        currentFriends.add(friendName)
-                        prefs.edit().putStringSet("friends", currentFriends).apply()
-                        Log.d("ArielService", "Added $friendName to friends via reciprocal pairing")
-                        addFriend(friendName)
-                        val updateIntent = Intent("com.thomaslamendola.ariel.FRIENDS_UPDATED").apply {
-                            setPackage(packageName)
-                        }
-                        sendBroadcast(updateIntent)
-                    }
-                }
             }
 
             val savedFriends = prefs.getStringSet("friends", emptySet()) ?: emptySet()

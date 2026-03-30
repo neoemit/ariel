@@ -40,7 +40,6 @@ class NearbyManager(private val context: Context, val myName: String) {
 
     var onPanicReceived: ((senderName: String, escalationType: String, eventId: String) -> Unit)? = null
     var onAcknowledgeReceived: ((acknowledgerName: String) -> Unit)? = null
-    var onPairingReceived: ((friendName: String) -> Unit)? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var dutyCycleRunnable: Runnable? = null
@@ -65,12 +64,20 @@ class NearbyManager(private val context: Context, val myName: String) {
                 }
                 message.startsWith("ACK:") -> onAcknowledgeReceived?.invoke(message.removePrefix("ACK:"))
                 message.startsWith("PAIR:") -> {
-                    val name = message.removePrefix("PAIR:")
+                    val name = message.removePrefix("PAIR:").trim()
+                    if (name.isBlank()) return
+                    if (name.equals(myName, ignoreCase = true)) {
+                        Log.w(tag, "Ignoring self PAIR payload from $endpointId")
+                        return
+                    }
+                    if (!trustedFriends.contains(name)) {
+                        Log.w(tag, "Ignoring PAIR from untrusted $name")
+                        return
+                    }
                     nameToEndpoint[name] = endpointId
                     endpointToName[endpointId] = name
                     Log.d(tag, "PAIR received: $name -> $endpointId")
                     toast("Paired with $name")
-                    onPairingReceived?.invoke(name)
                     notifyPeerCount()
                 }
                 message == "PING" -> {
@@ -88,6 +95,12 @@ class NearbyManager(private val context: Context, val myName: String) {
     private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, info: ConnectionInfo) {
             Log.d(tag, "Connection initiated by ${info.endpointName} ($endpointId)")
+            val requesterName = info.endpointName.trim()
+            if (!trustedFriends.contains(requesterName)) {
+                Log.w(tag, "Rejecting connection from untrusted peer: $requesterName")
+                connectionsClient.rejectConnection(endpointId)
+                return
+            }
             connectionsClient.acceptConnection(endpointId, payloadCallback)
         }
 
@@ -142,9 +155,9 @@ class NearbyManager(private val context: Context, val myName: String) {
                 return
             }
 
-            val shouldConnect = trustedFriends.isEmpty() || trustedFriends.contains(peerName)
+            val shouldConnect = trustedFriends.contains(peerName)
             if (shouldConnect) {
-                val isInitiator = myName < peerName || trustedFriends.isEmpty()
+                val isInitiator = myName < peerName
                 if (isInitiator) {
                     Log.d(tag, "Initiating connection to $peerName ($endpointId)")
                     notifyStatus("Connecting to $peerName...")
