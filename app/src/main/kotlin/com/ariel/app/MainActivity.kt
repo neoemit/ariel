@@ -201,7 +201,6 @@ fun ArielApp(viewModel: PanicViewModel = viewModel()) {
     // bottom navigation with three tabs
     val snackbarHostState = remember { SnackbarHostState() }
     Scaffold(
-        contentWindowInsets = WindowInsets.safeDrawing,
         bottomBar = {
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surface
