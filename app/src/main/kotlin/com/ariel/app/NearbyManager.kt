@@ -25,9 +25,7 @@ class NearbyManager(private val context: Context, val myName: String) {
     private val tag = "NearbyManager"
     private val strategy = Strategy.P2P_CLUSTER
     private val serviceId = "com.thomaslamendola.ariel.PANIC_SERVICE"
-    private val reconnectDelayMs = 15_000L
-    private val dutyCycleScanMs = 15_000L
-    private val dutyCycleSleepMs = 45_000L
+    private val reconnectDelayMs = 5_000L
 
     private val connectionsClient = Nearby.getConnectionsClient(context)
 
@@ -37,15 +35,17 @@ class NearbyManager(private val context: Context, val myName: String) {
     private val trustedFriends = mutableSetOf<String>()
     private val nameToEndpoint = mutableMapOf<String, String>()
     private val endpointToName = mutableMapOf<String, String>()
+    private val pendingConnectionEndpointIds = mutableSetOf<String>()
 
     var onPanicReceived: ((senderName: String, escalationType: String, eventId: String) -> Unit)? = null
     var onAcknowledgeReceived: ((acknowledgerName: String) -> Unit)? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private var dutyCycleRunnable: Runnable? = null
-    private var isDutyCycleActive = false
     private var urgentTimeout: Runnable? = null
+    private var reconnectRunnable: Runnable? = null
     private var isRunning = false
+    private var isAdvertising = false
+    private var isDiscovering = false
 
     private fun toast(message: String) {
         mainHandler.post { Toast.makeText(context, message, Toast.LENGTH_SHORT).show() }
@@ -62,7 +62,9 @@ class NearbyManager(private val context: Context, val myName: String) {
                         onPanicReceived?.invoke(sender, escalationType, eventId)
                     }
                 }
+
                 message.startsWith("ACK:") -> onAcknowledgeReceived?.invoke(message.removePrefix("ACK:"))
+
                 message.startsWith("PAIR:") -> {
                     val name = message.removePrefix("PAIR:").trim()
                     if (name.isBlank()) return
@@ -80,9 +82,11 @@ class NearbyManager(private val context: Context, val myName: String) {
                     toast("Paired with $name")
                     notifyPeerCount()
                 }
+
                 message == "PING" -> {
                     connectionsClient.sendPayload(endpointId, Payload.fromBytes("PONG".toByteArray()))
                 }
+
                 message == "PONG" -> {
                     Log.d(tag, "PONG from $endpointId - link alive")
                 }
@@ -94,23 +98,37 @@ class NearbyManager(private val context: Context, val myName: String) {
 
     private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, info: ConnectionInfo) {
-            Log.d(tag, "Connection initiated by ${info.endpointName} ($endpointId)")
             val requesterName = info.endpointName.trim()
+            Log.d(tag, "Connection initiated by $requesterName ($endpointId)")
+            pendingConnectionEndpointIds.remove(endpointId)
+
+            if (requesterName.equals(myName, ignoreCase = true)) {
+                Log.w(tag, "Rejecting connection from self endpoint")
+                connectionsClient.rejectConnection(endpointId)
+                return
+            }
             if (!trustedFriends.contains(requesterName)) {
                 Log.w(tag, "Rejecting connection from untrusted peer: $requesterName")
                 connectionsClient.rejectConnection(endpointId)
                 return
             }
+
+            endpointToName[endpointId] = requesterName
+            nameToEndpoint[requesterName] = endpointId
             connectionsClient.acceptConnection(endpointId, payloadCallback)
         }
 
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
+            pendingConnectionEndpointIds.remove(endpointId)
+
             if (result.status.isSuccess) {
                 _peers.value += endpointId
-                Log.d(tag, "Connected to $endpointId - sending PAIR:$myName")
+                endpointToName[endpointId]?.let { peerName ->
+                    nameToEndpoint[peerName] = endpointId
+                }
                 notifyStatus("Connected!")
                 toast("Connected to buddy!")
-                stopDutyCycle()
+                cancelReconnect()
 
                 connectionsClient.sendPayload(endpointId, Payload.fromBytes("PAIR:$myName".toByteArray()))
                 notifyPeerCount()
@@ -119,68 +137,67 @@ class NearbyManager(private val context: Context, val myName: String) {
                 Log.e(tag, "Connection failed to $endpointId: $message (code ${result.status.statusCode})")
                 notifyStatus("Connection failed: $message")
                 toast("Connection failed: $message")
+                scheduleReconnect("connection_result_failed")
             }
         }
 
         override fun onDisconnected(endpointId: String) {
             _peers.value -= endpointId
+            pendingConnectionEndpointIds.remove(endpointId)
+
             val disconnectedName = endpointToName.remove(endpointId)
             if (disconnectedName != null) {
                 nameToEndpoint.remove(disconnectedName)
             } else {
                 nameToEndpoint.entries.removeAll { it.value == endpointId }
             }
+
             notifyPeerCount()
-            Log.d(tag, "Disconnected from $endpointId ($disconnectedName). Will try to reconnect.")
+            Log.d(tag, "Disconnected from $endpointId ($disconnectedName)")
             notifyStatus("Disconnected from $disconnectedName")
             toast("Buddy disconnected. Reconnecting...")
-
-            mainHandler.postDelayed({
-                if (isRunning && _peers.value.isEmpty()) {
-                    Log.d(tag, "Attempting reconnect - restarting advertising/discovery")
-                    startDutyCycle()
-                }
-            }, reconnectDelayMs)
+            scheduleReconnect("disconnected")
         }
     }
 
     private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
-            val peerName = info.endpointName
+            val peerName = info.endpointName.trim()
             Log.d(tag, "Discovered: $peerName ($endpointId), trustedFriends=$trustedFriends")
-            notifyStatus("Found buddy: $peerName")
 
-            if (_peers.value.contains(endpointId) || nameToEndpoint.containsKey(peerName)) {
-                Log.d(tag, "Already connected to $peerName, skipping")
+            if (peerName.isBlank() || peerName.equals(myName, ignoreCase = true)) return
+            if (!trustedFriends.contains(peerName)) {
+                Log.d(tag, "Ignoring $peerName - not in trusted list")
                 return
             }
+            if (_peers.value.contains(endpointId)) return
+            if (pendingConnectionEndpointIds.contains(endpointId)) return
+            if (nameToEndpoint[peerName]?.let { _peers.value.contains(it) } == true) return
 
-            val shouldConnect = trustedFriends.contains(peerName)
-            if (shouldConnect) {
-                val isInitiator = myName < peerName
-                if (isInitiator) {
-                    Log.d(tag, "Initiating connection to $peerName ($endpointId)")
-                    notifyStatus("Connecting to $peerName...")
-                    connectionsClient.requestConnection(myName, endpointId, connectionLifecycleCallback)
-                        .addOnSuccessListener { Log.d(tag, "requestConnection to $peerName succeeded") }
-                        .addOnFailureListener { error ->
-                            Log.e(tag, "requestConnection to $peerName FAILED: ${error.message}")
-                            notifyStatus("Connection failed: ${error.message}")
-                        }
-                } else {
-                    Log.d(tag, "Waiting for $peerName to initiate (since $myName >= $peerName)")
-                    notifyStatus("Waiting for $peerName...")
+            endpointToName[endpointId] = peerName
+            if (!pendingConnectionEndpointIds.add(endpointId)) return
+
+            notifyStatus("Connecting to $peerName...")
+            connectionsClient.requestConnection(myName, endpointId, connectionLifecycleCallback)
+                .addOnSuccessListener {
+                    Log.d(tag, "requestConnection to $peerName succeeded")
                 }
-            } else {
-                Log.d(tag, "Ignoring $peerName - not in trusted list")
-            }
+                .addOnFailureListener { error ->
+                    pendingConnectionEndpointIds.remove(endpointId)
+                    endpointToName.remove(endpointId)
+                    Log.e(tag, "requestConnection to $peerName FAILED: ${error.message}")
+                    notifyStatus("Connection failed: ${error.message}")
+                    scheduleReconnect("request_connection_failed")
+                }
         }
 
         override fun onEndpointLost(endpointId: String) {
             Log.d(tag, "Endpoint lost: $endpointId")
-            mainHandler.postDelayed({
-                if (_peers.value.isEmpty() && isRunning) startDutyCycle()
-            }, reconnectDelayMs)
+            pendingConnectionEndpointIds.remove(endpointId)
+            if (!_peers.value.contains(endpointId)) {
+                endpointToName.remove(endpointId)
+            }
+            scheduleReconnect("endpoint_lost")
         }
     }
 
@@ -194,113 +211,190 @@ class NearbyManager(private val context: Context, val myName: String) {
 
     fun startPairing() {
         isRunning = true
-        Log.d(tag, "startPairing() - advertising as '$myName', trustedFriends=$trustedFriends")
-        startDutyCycle()
+        Log.d(tag, "startPairing() - myName=$myName trustedFriends=$trustedFriends")
+        refreshConnectivityState("start_pairing")
+        notifyPeerCount()
     }
 
     fun stopPairing() {
         isRunning = false
-        stopDutyCycle()
-        connectionsClient.stopAdvertising()
-        connectionsClient.stopDiscovery()
+        cancelReconnect()
+        urgentTimeout?.let { mainHandler.removeCallbacks(it) }
+        urgentTimeout = null
+
+        stopNearbyRadios()
         connectionsClient.stopAllEndpoints()
+        pendingConnectionEndpointIds.clear()
         _peers.value = emptySet()
+        notifyPeerCount()
     }
 
-    private fun restartAdvertisingAndDiscovery() {
+    private fun refreshConnectivityState(reason: String) {
         if (!isRunning) return
-        Log.d(tag, "Restarting advertising and discovery...")
-        connectionsClient.stopAdvertising()
-        connectionsClient.stopDiscovery()
+
+        if (trustedFriends.isEmpty()) {
+            Log.d(tag, "refreshConnectivityState($reason): no trusted friends, stopping radios")
+            cancelReconnect()
+            stopNearbyRadios()
+            pendingConnectionEndpointIds.clear()
+            _peers.value = emptySet()
+            notifyPeerCount()
+            return
+        }
+
+        Log.d(tag, "refreshConnectivityState($reason): ensuring continuous nearby connectivity")
         startAdvertising()
         startDiscovery()
-    }
-
-    private fun startDutyCycle() {
-        stopDutyCycle()
-        isDutyCycleActive = true
-        dutyCycleRunnable = object : Runnable {
-            override fun run() {
-                if (!isRunning) return
-
-                if (_peers.value.isEmpty()) {
-                    Log.d(tag, "DutyCycle: active window start")
-                    restartAdvertisingAndDiscovery()
-                    mainHandler.postDelayed({
-                        Log.d(tag, "DutyCycle: sleep window start (stopping radios)")
-                        connectionsClient.stopAdvertising()
-                        connectionsClient.stopDiscovery()
-                        if (isDutyCycleActive && isRunning) {
-                            mainHandler.postDelayed(this, dutyCycleSleepMs)
-                        }
-                    }, dutyCycleScanMs)
-                } else {
-                    Log.d(tag, "DutyCycle: peers connected, stopping duty cycle")
-                    stopDutyCycle()
-                }
-            }
+        if (_peers.value.isEmpty()) {
+            scheduleReconnect("refresh_$reason")
+        } else {
+            cancelReconnect()
         }
-        mainHandler.post(dutyCycleRunnable!!)
     }
 
-    private fun stopDutyCycle() {
-        dutyCycleRunnable?.let { mainHandler.removeCallbacks(it) }
-        dutyCycleRunnable = null
-        isDutyCycleActive = false
+    private fun restartAdvertisingAndDiscovery(reason: String) {
+        if (!isRunning || trustedFriends.isEmpty()) return
+
+        Log.d(tag, "Restarting advertising/discovery ($reason)")
+        stopNearbyRadios()
+        startAdvertising()
+        startDiscovery()
+        notifyPeerCount()
+    }
+
+    private fun scheduleReconnect(reason: String) {
+        if (!isRunning || trustedFriends.isEmpty()) return
+        if (_peers.value.isNotEmpty()) {
+            cancelReconnect()
+            return
+        }
+
+        reconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+        reconnectRunnable = Runnable {
+            if (!isRunning || trustedFriends.isEmpty()) return@Runnable
+            if (_peers.value.isNotEmpty()) {
+                cancelReconnect()
+                return@Runnable
+            }
+            Log.d(tag, "Reconnect tick ($reason)")
+            restartAdvertisingAndDiscovery("reconnect_$reason")
+            scheduleReconnect("loop")
+        }
+        mainHandler.postDelayed(reconnectRunnable!!, reconnectDelayMs)
+    }
+
+    private fun cancelReconnect() {
+        reconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+        reconnectRunnable = null
     }
 
     fun enterUrgentMode(durationMs: Long = 120_000L) {
-        if (!isRunning) return
+        if (!isRunning || trustedFriends.isEmpty()) return
+
         Log.d(tag, "Entering urgent mode for ${durationMs}ms")
-        stopDutyCycle()
-        restartAdvertisingAndDiscovery()
+        restartAdvertisingAndDiscovery("urgent_start")
+        scheduleReconnect("urgent_start")
+
         urgentTimeout?.let { mainHandler.removeCallbacks(it) }
         urgentTimeout = Runnable {
-            Log.d(tag, "Urgent mode timeout; peers=${_peers.value.size}")
-            if (_peers.value.isEmpty()) startDutyCycle()
+            if (!isRunning || trustedFriends.isEmpty()) return@Runnable
+            Log.d(tag, "Urgent mode reinforcement tick")
+            restartAdvertisingAndDiscovery("urgent_reinforce")
+            scheduleReconnect("urgent_reinforce")
         }
-        mainHandler.postDelayed(urgentTimeout!!, durationMs)
+        mainHandler.postDelayed(urgentTimeout!!, durationMs.coerceAtLeast(5_000L))
     }
 
     private fun startAdvertising() {
+        if (isAdvertising) return
+
         val options = AdvertisingOptions.Builder().setStrategy(strategy).build()
         connectionsClient.startAdvertising(myName, serviceId, connectionLifecycleCallback, options)
-            .addOnSuccessListener { Log.d(tag, "Advertising started as '$myName'") }
+            .addOnSuccessListener {
+                isAdvertising = true
+                Log.d(tag, "Advertising started as '$myName'")
+            }
             .addOnFailureListener { error ->
+                isAdvertising = false
                 Log.e(tag, "Advertising FAILED: ${error.message}", error)
                 toast("Advertising failed: ${error.message}")
+                scheduleReconnect("advertising_failed")
             }
     }
 
     private fun startDiscovery() {
+        if (isDiscovering) return
+
         val options = DiscoveryOptions.Builder().setStrategy(strategy).build()
         connectionsClient.startDiscovery(serviceId, endpointDiscoveryCallback, options)
-            .addOnSuccessListener { Log.d(tag, "Discovery started") }
+            .addOnSuccessListener {
+                isDiscovering = true
+                Log.d(tag, "Discovery started")
+            }
             .addOnFailureListener { error ->
+                isDiscovering = false
                 Log.e(tag, "Discovery FAILED: ${error.message}", error)
                 toast("Discovery failed: ${error.message}")
+                scheduleReconnect("discovery_failed")
             }
     }
 
+    private fun stopNearbyRadios() {
+        if (isAdvertising) {
+            connectionsClient.stopAdvertising()
+        } else {
+            runCatching { connectionsClient.stopAdvertising() }
+        }
+        if (isDiscovering) {
+            connectionsClient.stopDiscovery()
+        } else {
+            runCatching { connectionsClient.stopDiscovery() }
+        }
+        isAdvertising = false
+        isDiscovering = false
+    }
+
     fun addFriend(name: String) {
-        trustedFriends.add(name)
-        Log.d(tag, "addFriend($name) - trustedFriends=$trustedFriends")
-        if (isRunning) startDutyCycle()
+        val normalized = name.trim()
+        if (normalized.isBlank() || normalized.equals(myName, ignoreCase = true)) return
+
+        trustedFriends.add(normalized)
+        Log.d(tag, "addFriend($normalized) - trustedFriends=$trustedFriends")
+        if (isRunning) {
+            refreshConnectivityState("add_friend")
+        }
     }
 
     fun removeFriend(name: String) {
-        trustedFriends.remove(name)
-        if (isRunning) startDutyCycle()
+        val normalized = name.trim()
+        if (normalized.isBlank()) return
+
+        trustedFriends.remove(normalized)
+        val endpointId = nameToEndpoint.remove(normalized)
+        if (endpointId != null) {
+            endpointToName.remove(endpointId)
+            pendingConnectionEndpointIds.remove(endpointId)
+            _peers.value -= endpointId
+        }
+
+        if (isRunning) {
+            refreshConnectivityState("remove_friend")
+        }
+        notifyPeerCount()
     }
 
     fun clearFriends() {
         trustedFriends.clear()
         nameToEndpoint.clear()
         endpointToName.clear()
+        pendingConnectionEndpointIds.clear()
         connectionsClient.stopAllEndpoints()
         _peers.value = emptySet()
         notifyPeerCount()
-        if (isRunning) startDutyCycle()
+
+        if (isRunning) {
+            refreshConnectivityState("clear_friends")
+        }
     }
 
     fun broadcastPanic(escalationType: String, eventId: String) {
@@ -323,12 +417,17 @@ class NearbyManager(private val context: Context, val myName: String) {
 
     fun triggerPeerCountRefresh() {
         notifyPeerCount()
+        if (isRunning && trustedFriends.isNotEmpty() && _peers.value.isEmpty()) {
+            scheduleReconnect("trigger_peer_refresh")
+        }
     }
 
     private fun notifyPeerCount() {
-        val count = _peers.value.size
+        nameToEndpoint.entries.removeAll { (_, endpointId) -> !_peers.value.contains(endpointId) }
         val connectedPeerIds = ArrayList(nameToEndpoint.keys)
-        Log.d(tag, "Notifying peer count change: count=$count peers=$connectedPeerIds")
+        val count = _peers.value.size
+
+        Log.d(tag, "Notifying peer count change: count=$count peers=$connectedPeerIds pending=${pendingConnectionEndpointIds.size}")
         val intent = Intent("com.thomaslamendola.ariel.PEER_COUNT_CHANGED").apply {
             putExtra("COUNT", count)
             putStringArrayListExtra("PEER_IDS", connectedPeerIds)

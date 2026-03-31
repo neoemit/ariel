@@ -1,5 +1,6 @@
 package com.thomaslamendola.ariel
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -46,6 +47,7 @@ class SirenService : Service() {
     private var relayHeartbeatJob: Job? = null
     private var cachedFcmToken: String? = null
     private var lastRelayRegistrationAtMs: Long = 0L
+    private var ackHandledForActivePanic = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
@@ -59,6 +61,13 @@ class SirenService : Service() {
 
             "SYNC_PUSH_REGISTRATION" -> {
                 syncPushRegistration(force = true)
+            }
+
+            "FORCE_REACHABILITY_REFRESH" -> {
+                startMonitoring()
+                nearbyManager?.enterUrgentMode(durationMs = 30_000L)
+                nearbyManager?.triggerPeerCountRefresh()
+                syncPushRegistration(force = false)
             }
 
             "STOP_SIREN" -> {
@@ -253,6 +262,7 @@ class SirenService : Service() {
             return
         }
 
+        ackHandledForActivePanic = false
         currentPanicSender = sender
         currentPanicEventId = eventId
         startSiren()
@@ -380,17 +390,23 @@ class SirenService : Service() {
         }
         wakeLock = null
 
-        currentPanicSender?.let { sender ->
+        val sender = currentPanicSender
+        val eventId = currentPanicEventId
+        if (!sender.isNullOrBlank() && !ackHandledForActivePanic) {
+            ackHandledForActivePanic = true
             nearbyManager?.sendAcknowledge(sender)
-            sendRelayAcknowledgment(sender, currentPanicEventId)
+            sendRelayAcknowledgment(sender, eventId)
+
+            val ackIntent = Intent("com.thomaslamendola.ariel.ACKNOWLEDGED").apply {
+                setPackage(packageName)
+            }
+            sendBroadcast(ackIntent)
+        } else if (!sender.isNullOrBlank()) {
+            Log.d("ArielService", "Skipping duplicate acknowledgment for active panic sender=$sender event=$eventId")
         }
         currentPanicSender = null
         currentPanicEventId = null
-
-        val ackIntent = Intent("com.thomaslamendola.ariel.ACKNOWLEDGED").apply {
-            setPackage(packageName)
-        }
-        sendBroadcast(ackIntent)
+        ackHandledForActivePanic = false
 
         showMonitorNotification()
         nearbyManager?.triggerPeerCountRefresh()
@@ -443,9 +459,14 @@ class SirenService : Service() {
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setOngoing(true)
+            .setAutoCancel(false)
             .setContentIntent(stopPendingIntent)
+            .setDeleteIntent(stopPendingIntent)
             .addAction(android.R.drawable.ic_delete, "I am coming!", stopPendingIntent)
             .build()
+            .apply {
+                flags = flags or Notification.FLAG_NO_CLEAR
+            }
 
         startForeground(notificationId, notification)
     }

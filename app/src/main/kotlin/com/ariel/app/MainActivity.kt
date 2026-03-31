@@ -474,6 +474,7 @@ fun PanicScreen(
     }
 
     val peerCount by viewModel.peerCount.collectAsState()
+    val isPresenceChecking by viewModel.isPresenceChecking.collectAsState()
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -483,7 +484,11 @@ fun PanicScreen(
         // Status Bar at the top
         Surface(
             shape = CircleShape,
-            color = if (peerCount > 0) Color(0xFF1B5E20) else Color(0xFF333333),
+            color = when {
+                peerCount > 0 -> Color(0xFF1B5E20)
+                isPresenceChecking -> Color(0xFF5D4037)
+                else -> Color(0xFF333333)
+            },
             modifier = Modifier.padding(bottom = 48.dp)
         ) {
             Row(
@@ -491,12 +496,23 @@ fun PanicScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
-                    modifier = Modifier.size(8.dp).background(if (peerCount > 0) Color.Green else Color.Gray, CircleShape)
+                    modifier = Modifier.size(8.dp).background(
+                        when {
+                            peerCount > 0 -> Color.Green
+                            isPresenceChecking -> Color(0xFFFFC107)
+                            else -> Color.Gray
+                        },
+                        CircleShape
+                    )
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 // singular/plural handling
                 val onlineText = when (peerCount) {
-                    0 -> ctx.getString(R.string.status_none_online)
+                    0 -> if (isPresenceChecking) {
+                        ctx.getString(R.string.status_checking_online)
+                    } else {
+                        ctx.getString(R.string.status_none_online)
+                    }
                     1 -> ctx.getString(R.string.status_one_online)
                     else -> ctx.getString(R.string.status_many_online, peerCount)
                 }

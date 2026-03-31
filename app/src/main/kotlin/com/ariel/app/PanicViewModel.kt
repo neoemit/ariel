@@ -43,12 +43,18 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _peerCount = MutableStateFlow(0)
     val peerCount = _peerCount.asStateFlow()
+    private val _isPresenceChecking = MutableStateFlow(true)
+    val isPresenceChecking = _isPresenceChecking.asStateFlow()
 
     private val nearbyPeerIds = MutableStateFlow<Set<String>>(emptySet())
     private val nearbyEndpointCount = MutableStateFlow(0)
     private val relayOnlinePeerIds = MutableStateFlow<Set<String>>(emptySet())
 
     private var relayPresencePollingJob: Job? = null
+    private var zeroConfirmationJob: Job? = null
+    private var hasCompletedFirstPresenceSync = false
+    private var lastReachableAtMs: Long = 0L
+    private var lastForcedReconciliationAtMs: Long = 0L
     private var isUiActive = false
     private val appReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -85,7 +91,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
                     Log.d("PanicVM", "Nearby peer update: count=$count peers=$peers")
                     nearbyEndpointCount.value = count
                     nearbyPeerIds.value = peers
-                    updateCombinedPeerCount()
+                    updateCombinedPeerCount(reason = "nearby_broadcast")
                 }
 
                 "com.thomaslamendola.ariel.STATUS_UPDATE" -> {
@@ -280,7 +286,14 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         _friends.value = emptyList()
         _nicknames.value = emptyMap()
         relayOnlinePeerIds.value = emptySet()
-        updateCombinedPeerCount()
+        nearbyPeerIds.value = emptySet()
+        nearbyEndpointCount.value = 0
+        zeroConfirmationJob?.cancel()
+        zeroConfirmationJob = null
+        hasCompletedFirstPresenceSync = true
+        lastReachableAtMs = 0L
+        _isPresenceChecking.value = false
+        updateCombinedPeerCount(reason = "clear_pool")
         context.startService(Intent(context, SirenService::class.java).apply {
             action = "CLEAR_POOL"
         })
@@ -327,7 +340,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         if (relayPresencePollingJob?.isActive == true) return
 
         relayPresencePollingJob = viewModelScope.launch {
-            refreshRelayPresence()
+            requestImmediateReconciliation(reason = "poll_start")
             while (isActive) {
                 delay(PRESENCE_POLL_INTERVAL_MS)
                 refreshRelayPresence()
@@ -344,7 +357,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         val friendsSnapshot = _friends.value.filter { it.isNotBlank() }
         if (friendsSnapshot.isEmpty() || RelayBackendClient.getBackendUrl(context).isNullOrBlank()) {
             relayOnlinePeerIds.value = emptySet()
-            updateCombinedPeerCount()
+            hasCompletedFirstPresenceSync = true
+            updateCombinedPeerCount(reason = "relay_skipped")
             return
         }
 
@@ -356,16 +370,115 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             )
         }.onSuccess { onlineIds ->
             relayOnlinePeerIds.value = onlineIds.filter { friendsSnapshot.contains(it) }.toSet()
-            updateCombinedPeerCount()
+            hasCompletedFirstPresenceSync = true
+            updateCombinedPeerCount(reason = "relay_success")
         }.onFailure { error ->
             Log.w("PanicVM", "Relay presence refresh failed: ${error.message}")
-            updateCombinedPeerCount()
+            hasCompletedFirstPresenceSync = true
+            updateCombinedPeerCount(reason = "relay_failure")
         }
     }
 
-    private fun updateCombinedPeerCount() {
+    private fun computeRawReachableCount(): Int {
         val byIds = (nearbyPeerIds.value + relayOnlinePeerIds.value).size
-        _peerCount.value = maxOf(byIds, nearbyEndpointCount.value)
+        return maxOf(byIds, nearbyEndpointCount.value)
+    }
+
+    private fun requestImmediateReconciliation(reason: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastForcedReconciliationAtMs < FORCE_RECONCILIATION_MIN_INTERVAL_MS) return
+        lastForcedReconciliationAtMs = now
+
+        Log.d("PanicVM", "reachability_reconcile reason=$reason")
+        context.startService(Intent(context, SirenService::class.java).apply {
+            action = "FORCE_REACHABILITY_REFRESH"
+        })
+        viewModelScope.launch {
+            refreshRelayPresence()
+        }
+    }
+
+    private fun logReachabilityState(reason: String, rawCount: Int, withinGrace: Boolean) {
+        Log.d(
+            "PanicVM",
+            "reachability_state reason=$reason rawCount=$rawCount displayed=${_peerCount.value} " +
+                "nearbyEndpoints=${nearbyEndpointCount.value} nearbyIds=${nearbyPeerIds.value.size} " +
+                "relayIds=${relayOnlinePeerIds.value.size} grace=$withinGrace checking=${_isPresenceChecking.value} " +
+                "firstSyncCompleted=$hasCompletedFirstPresenceSync"
+        )
+    }
+
+    private fun updateCombinedPeerCount(reason: String) {
+        val rawCount = computeRawReachableCount()
+        val now = System.currentTimeMillis()
+        val hasFriends = _friends.value.isNotEmpty()
+        val withinGrace = hasCompletedFirstPresenceSync &&
+            lastReachableAtMs > 0L &&
+            now - lastReachableAtMs <= OFFLINE_GRACE_WINDOW_MS &&
+            _peerCount.value > 0
+
+        if (rawCount > 0) {
+            zeroConfirmationJob?.cancel()
+            zeroConfirmationJob = null
+            _peerCount.value = rawCount
+            _isPresenceChecking.value = false
+            hasCompletedFirstPresenceSync = true
+            lastReachableAtMs = now
+            logReachabilityState(reason = "${reason}_reachable", rawCount = rawCount, withinGrace = false)
+            return
+        }
+
+        if (!hasFriends) {
+            zeroConfirmationJob?.cancel()
+            zeroConfirmationJob = null
+            _peerCount.value = 0
+            _isPresenceChecking.value = false
+            hasCompletedFirstPresenceSync = true
+            logReachabilityState(reason = "${reason}_no_friends", rawCount = 0, withinGrace = false)
+            return
+        }
+
+        if (withinGrace) {
+            _isPresenceChecking.value = true
+            requestImmediateReconciliation(reason = "${reason}_grace")
+            logReachabilityState(reason = "${reason}_grace_hold", rawCount = rawCount, withinGrace = true)
+            return
+        }
+
+        if (!hasCompletedFirstPresenceSync) {
+            _isPresenceChecking.value = true
+            requestImmediateReconciliation(reason = "${reason}_first_sync")
+            logReachabilityState(reason = "${reason}_first_sync", rawCount = rawCount, withinGrace = false)
+            return
+        }
+
+        if (zeroConfirmationJob?.isActive == true) {
+            _isPresenceChecking.value = true
+            logReachabilityState(reason = "${reason}_zero_confirm_pending", rawCount = rawCount, withinGrace = false)
+            return
+        }
+
+        _isPresenceChecking.value = true
+        zeroConfirmationJob = viewModelScope.launch {
+            requestImmediateReconciliation(reason = "${reason}_zero_confirm")
+            delay(PRESENCE_ZERO_CONFIRM_DELAY_MS)
+
+            val confirmedRawCount = computeRawReachableCount()
+            val confirmedWithinGrace = lastReachableAtMs > 0L &&
+                System.currentTimeMillis() - lastReachableAtMs <= OFFLINE_GRACE_WINDOW_MS &&
+                _peerCount.value > 0
+
+            if (confirmedRawCount == 0 && !confirmedWithinGrace) {
+                _peerCount.value = 0
+                _isPresenceChecking.value = false
+                logReachabilityState(reason = "${reason}_offline_confirmed", rawCount = 0, withinGrace = false)
+            } else {
+                logReachabilityState(reason = "${reason}_offline_recovered", rawCount = confirmedRawCount, withinGrace = confirmedWithinGrace)
+                updateCombinedPeerCount(reason = "${reason}_post_confirm")
+            }
+
+            zeroConfirmationJob = null
+        }
     }
 
     private fun persistSanitizedFriends(rawFriends: Set<String>): Set<String> {
@@ -386,6 +499,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         stopRelayPresencePolling()
+        zeroConfirmationJob?.cancel()
+        zeroConfirmationJob = null
         runCatching { context.unregisterReceiver(appReceiver) }
         super.onCleared()
     }
@@ -394,6 +509,9 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         const val PANIC_HOLD_DURATION_MS = 1_500L
         const val PRESENCE_POLL_INTERVAL_MS = 120_000L
         const val PRESENCE_STALE_AFTER_SECONDS = 1_200
+        const val OFFLINE_GRACE_WINDOW_MS = 180_000L
+        const val PRESENCE_ZERO_CONFIRM_DELAY_MS = 2_500L
+        const val FORCE_RECONCILIATION_MIN_INTERVAL_MS = 5_000L
         const val ESCALATION_GENERIC = "GENERIC"
         const val ESCALATION_MEDICAL = "MEDICAL"
         const val ESCALATION_ARMED = "ARMED"
