@@ -5,6 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.net.ConnectivityManager
+import android.net.Network
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
@@ -36,6 +38,7 @@ class SirenService : Service() {
     private val monitorNotificationId = 1002
     private val relayHeartbeatIntervalMs = 10 * 60_000L
     private val relayRegistrationMinIntervalMs = 10 * 60_000L
+    private val connectivityRegistrationMinIntervalMs = 30_000L
 
     private var nearbyManager: NearbyManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -47,7 +50,29 @@ class SirenService : Service() {
     private var relayHeartbeatJob: Job? = null
     private var cachedFcmToken: String? = null
     private var lastRelayRegistrationAtMs: Long = 0L
+    private var lastConnectivityRegistrationAtMs: Long = 0L
     private var ackHandledForActivePanic = false
+    private var networkCallbackRegistered = false
+
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            val now = System.currentTimeMillis()
+            if (now - lastConnectivityRegistrationAtMs < connectivityRegistrationMinIntervalMs) {
+                return
+            }
+            lastConnectivityRegistrationAtMs = now
+
+            Log.d("ArielService", "Network available; forcing relay registration sync")
+            startMonitoring()
+            syncPushRegistration(force = true)
+            nearbyManager?.triggerPeerCountRefresh()
+        }
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        registerNetworkCallback()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
@@ -93,11 +118,13 @@ class SirenService : Service() {
             }
 
             "REMOVE_FRIEND" -> {
+                startMonitoring()
                 val friendName = intent.getStringExtra("FRIEND_NAME")
                 friendName?.let { nearbyManager?.removeFriend(it) }
             }
 
             "CLEAR_POOL" -> {
+                startMonitoring()
                 nearbyManager?.clearFriends()
             }
 
@@ -134,11 +161,21 @@ class SirenService : Service() {
 
     private fun startMonitoring() {
         val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
-        cachedFcmToken = cachedFcmToken ?: prefs.getString(PREF_FCM_TOKEN, null)
+        cachedFcmToken = prefs.getString(PREF_FCM_TOKEN, null)
+        val myName = getOrCreateMyName(prefs)
+
+        val savedFriends = prefs.getStringSet("friends", emptySet())
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() && !it.equals(myName, ignoreCase = true) }
+            ?.toSet()
+            ?: emptySet()
+        val nicknames = savedFriends.mapNotNull { buddyId ->
+            prefs.getString("nickname_$buddyId", null)?.trim()?.takeIf { it.isNotBlank() }?.let { nickname ->
+                buddyId to nickname
+            }
+        }.toMap()
 
         if (nearbyManager == null) {
-            val myName = getOrCreateMyName(prefs)
-
             nearbyManager = NearbyManager(this, myName).apply {
                 onPanicReceived = { sender, escalationType, eventId ->
                     Log.d("ArielService", "PANIC RECEIVED FROM $sender type=$escalationType event=$eventId")
@@ -150,14 +187,12 @@ class SirenService : Service() {
                     handleIncomingAcknowledge(acknowledger, null)
                 }
             }
-
-            val savedFriends = prefs.getStringSet("friends", emptySet()) ?: emptySet()
-            savedFriends.forEach { nearbyManager?.addFriend(it) }
-            nearbyManager?.startPairing()
         }
+        nearbyManager?.replaceTrustedState(savedFriends, nicknames)
+        nearbyManager?.startPairing()
 
         showMonitorNotification()
-        syncPushRegistration(force = false)
+        syncPushRegistration(force = true)
         startRelayHeartbeat()
     }
 
@@ -506,6 +541,7 @@ class SirenService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        unregisterNetworkCallback()
         nearbyManager?.stopPairing()
         wakeLock?.let {
             if (it.isHeld) it.release()
@@ -514,6 +550,26 @@ class SirenService : Service() {
         relayHeartbeatJob?.cancel()
         relayHeartbeatJob = null
         serviceScope.cancel()
+    }
+
+    private fun registerNetworkCallback() {
+        if (networkCallbackRegistered) return
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        runCatching {
+            connectivityManager.registerDefaultNetworkCallback(networkCallback)
+            networkCallbackRegistered = true
+        }.onFailure { error ->
+            Log.w("ArielService", "Failed to register network callback: ${error.message}")
+        }
+    }
+
+    private fun unregisterNetworkCallback() {
+        if (!networkCallbackRegistered) return
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        runCatching {
+            connectivityManager.unregisterNetworkCallback(networkCallback)
+        }
+        networkCallbackRegistered = false
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

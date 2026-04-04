@@ -36,6 +36,7 @@ class NearbyManager(private val context: Context, val myName: String) {
     private val nameToEndpoint = mutableMapOf<String, String>()
     private val endpointToName = mutableMapOf<String, String>()
     private val pendingConnectionEndpointIds = mutableSetOf<String>()
+    private val friendNicknames = mutableMapOf<String, String>()
 
     var onPanicReceived: ((senderName: String, escalationType: String, eventId: String) -> Unit)? = null
     var onAcknowledgeReceived: ((acknowledgerName: String) -> Unit)? = null
@@ -49,6 +50,10 @@ class NearbyManager(private val context: Context, val myName: String) {
 
     private fun toast(message: String) {
         mainHandler.post { Toast.makeText(context, message, Toast.LENGTH_SHORT).show() }
+    }
+
+    private fun displayNameFor(id: String): String {
+        return friendNicknames[id]?.takeIf { it.isNotBlank() } ?: id
     }
 
     private val payloadCallback = object : PayloadCallback() {
@@ -79,7 +84,7 @@ class NearbyManager(private val context: Context, val myName: String) {
                     nameToEndpoint[name] = endpointId
                     endpointToName[endpointId] = name
                     Log.d(tag, "PAIR received: $name -> $endpointId")
-                    toast("Paired with $name")
+                    toast("Paired with ${displayNameFor(name)}")
                     notifyPeerCount()
                 }
 
@@ -127,16 +132,23 @@ class NearbyManager(private val context: Context, val myName: String) {
                     nameToEndpoint[peerName] = endpointId
                 }
                 notifyStatus("Connected!")
-                toast("Connected to buddy!")
+                val peerName = endpointToName[endpointId]
+                if (peerName != null) {
+                    toast("Connected to ${displayNameFor(peerName)}")
+                } else {
+                    toast("Connected to buddy")
+                }
                 cancelReconnect()
 
                 connectionsClient.sendPayload(endpointId, Payload.fromBytes("PAIR:$myName".toByteArray()))
                 notifyPeerCount()
             } else {
                 val message = result.status.statusMessage ?: "unknown"
+                val peerName = endpointToName[endpointId]
+                val peerDisplay = peerName?.let { displayNameFor(it) } ?: "buddy"
                 Log.e(tag, "Connection failed to $endpointId: $message (code ${result.status.statusCode})")
                 notifyStatus("Connection failed: $message")
-                toast("Connection failed: $message")
+                toast("Connection failed with $peerDisplay: $message")
                 scheduleReconnect("connection_result_failed")
             }
         }
@@ -155,7 +167,8 @@ class NearbyManager(private val context: Context, val myName: String) {
             notifyPeerCount()
             Log.d(tag, "Disconnected from $endpointId ($disconnectedName)")
             notifyStatus("Disconnected from $disconnectedName")
-            toast("Buddy disconnected. Reconnecting...")
+            val peerDisplay = disconnectedName?.let { displayNameFor(it) } ?: "buddy"
+            toast("$peerDisplay disconnected. Reconnecting...")
             scheduleReconnect("disconnected")
         }
     }
@@ -370,6 +383,7 @@ class NearbyManager(private val context: Context, val myName: String) {
         if (normalized.isBlank()) return
 
         trustedFriends.remove(normalized)
+        friendNicknames.remove(normalized)
         val endpointId = nameToEndpoint.remove(normalized)
         if (endpointId != null) {
             endpointToName.remove(endpointId)
@@ -385,6 +399,7 @@ class NearbyManager(private val context: Context, val myName: String) {
 
     fun clearFriends() {
         trustedFriends.clear()
+        friendNicknames.clear()
         nameToEndpoint.clear()
         endpointToName.clear()
         pendingConnectionEndpointIds.clear()
@@ -420,6 +435,45 @@ class NearbyManager(private val context: Context, val myName: String) {
         if (isRunning && trustedFriends.isNotEmpty() && _peers.value.isEmpty()) {
             scheduleReconnect("trigger_peer_refresh")
         }
+    }
+
+    fun replaceTrustedState(friends: Set<String>, nicknames: Map<String, String>) {
+        val sanitizedFriends = friends
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.equals(myName, ignoreCase = true) }
+            .toSet()
+
+        trustedFriends.clear()
+        trustedFriends.addAll(sanitizedFriends)
+
+        friendNicknames.clear()
+        nicknames.forEach { (buddyId, nickname) ->
+            val normalizedId = buddyId.trim()
+            val normalizedNickname = nickname.trim()
+            if (normalizedId in sanitizedFriends && normalizedNickname.isNotBlank()) {
+                friendNicknames[normalizedId] = normalizedNickname
+            }
+        }
+
+        val endpointIdsToDrop = endpointToName
+            .filterValues { mappedName -> mappedName !in sanitizedFriends }
+            .keys
+            .toList()
+        endpointIdsToDrop.forEach { endpointId ->
+            val mappedName = endpointToName.remove(endpointId)
+            if (mappedName != null) {
+                nameToEndpoint.remove(mappedName)
+            }
+            pendingConnectionEndpointIds.remove(endpointId)
+            _peers.value -= endpointId
+            runCatching { connectionsClient.disconnectFromEndpoint(endpointId) }
+        }
+        nameToEndpoint.entries.removeAll { (mappedName, _) -> mappedName !in sanitizedFriends }
+
+        if (isRunning) {
+            refreshConnectivityState("replace_trusted_state")
+        }
+        notifyPeerCount()
     }
 
     private fun notifyPeerCount() {

@@ -4,4 +4,5 @@ plugins {
     id("org.jetbrains.kotlin.android") version "2.2.10" apply false
     id("com.google.gms.google-services") version "4.4.4" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.2.10" apply false
+    id("com.github.triplet.play") version "4.0.0" apply false
 }

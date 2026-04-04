@@ -16,6 +16,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+data class OnlineBuddy(
+    val id: String,
+    val displayName: String,
+)
+
 class PanicViewModel(application: Application) : AndroidViewModel(application) {
     private val context = application.applicationContext
     private val prefs = context.getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
@@ -46,9 +51,13 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     private val _isPresenceChecking = MutableStateFlow(true)
     val isPresenceChecking = _isPresenceChecking.asStateFlow()
 
-    private val nearbyPeerIds = MutableStateFlow<Set<String>>(emptySet())
+    private val nearbyOnlineIds = MutableStateFlow<Set<String>>(emptySet())
     private val nearbyEndpointCount = MutableStateFlow(0)
-    private val relayOnlinePeerIds = MutableStateFlow<Set<String>>(emptySet())
+    private val relayOnlineIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _onlineBuddyIds = MutableStateFlow<Set<String>>(emptySet())
+    val onlineBuddyIds = _onlineBuddyIds.asStateFlow()
+    private val _onlineBuddies = MutableStateFlow<List<OnlineBuddy>>(emptyList())
+    val onlineBuddies = _onlineBuddies.asStateFlow()
 
     private var relayPresencePollingJob: Job? = null
     private var zeroConfirmationJob: Job? = null
@@ -90,7 +99,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
 
                     Log.d("PanicVM", "Nearby peer update: count=$count peers=$peers")
                     nearbyEndpointCount.value = count
-                    nearbyPeerIds.value = peers
+                    nearbyOnlineIds.value = peers
                     updateCombinedPeerCount(reason = "nearby_broadcast")
                 }
 
@@ -285,8 +294,10 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putStringSet("friends", emptySet()).apply()
         _friends.value = emptyList()
         _nicknames.value = emptyMap()
-        relayOnlinePeerIds.value = emptySet()
-        nearbyPeerIds.value = emptySet()
+        relayOnlineIds.value = emptySet()
+        nearbyOnlineIds.value = emptySet()
+        _onlineBuddyIds.value = emptySet()
+        _onlineBuddies.value = emptyList()
         nearbyEndpointCount.value = 0
         zeroConfirmationJob?.cancel()
         zeroConfirmationJob = null
@@ -356,7 +367,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun refreshRelayPresence() {
         val friendsSnapshot = _friends.value.filter { it.isNotBlank() }
         if (friendsSnapshot.isEmpty() || RelayBackendClient.getBackendUrl(context).isNullOrBlank()) {
-            relayOnlinePeerIds.value = emptySet()
+            relayOnlineIds.value = emptySet()
             hasCompletedFirstPresenceSync = true
             updateCombinedPeerCount(reason = "relay_skipped")
             return
@@ -369,7 +380,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
                 staleAfterSeconds = PRESENCE_STALE_AFTER_SECONDS
             )
         }.onSuccess { onlineIds ->
-            relayOnlinePeerIds.value = onlineIds.filter { friendsSnapshot.contains(it) }.toSet()
+            relayOnlineIds.value = onlineIds.filter { friendsSnapshot.contains(it) }.toSet()
             hasCompletedFirstPresenceSync = true
             updateCombinedPeerCount(reason = "relay_success")
         }.onFailure { error ->
@@ -379,9 +390,34 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun computeOnlineBuddyIds(): Set<String> {
+        val friendsSet = _friends.value
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .toSet()
+        if (friendsSet.isEmpty()) return emptySet()
+
+        return (nearbyOnlineIds.value + relayOnlineIds.value)
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() && it in friendsSet }
+            .toSet()
+    }
+
+    private fun buildOnlineBuddies(onlineIds: Set<String>): List<OnlineBuddy> {
+        val nicknames = _nicknames.value
+        return onlineIds
+            .map { buddyId ->
+                OnlineBuddy(
+                    id = buddyId,
+                    displayName = nicknames[buddyId]?.takeIf { it.isNotBlank() } ?: buddyId
+                )
+            }
+            .sortedWith(compareBy<OnlineBuddy> { it.displayName.lowercase() }.thenBy { it.id })
+    }
+
     private fun computeRawReachableCount(): Int {
-        val byIds = (nearbyPeerIds.value + relayOnlinePeerIds.value).size
-        return maxOf(byIds, nearbyEndpointCount.value)
+        return computeOnlineBuddyIds().size
     }
 
     private fun requestImmediateReconciliation(reason: String) {
@@ -402,14 +438,17 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         Log.d(
             "PanicVM",
             "reachability_state reason=$reason rawCount=$rawCount displayed=${_peerCount.value} " +
-                "nearbyEndpoints=${nearbyEndpointCount.value} nearbyIds=${nearbyPeerIds.value.size} " +
-                "relayIds=${relayOnlinePeerIds.value.size} grace=$withinGrace checking=${_isPresenceChecking.value} " +
+                "nearbyEndpoints=${nearbyEndpointCount.value} nearbyIds=${nearbyOnlineIds.value.size} " +
+                "relayIds=${relayOnlineIds.value.size} onlineIds=${_onlineBuddyIds.value.size} grace=$withinGrace checking=${_isPresenceChecking.value} " +
                 "firstSyncCompleted=$hasCompletedFirstPresenceSync"
         )
     }
 
     private fun updateCombinedPeerCount(reason: String) {
-        val rawCount = computeRawReachableCount()
+        val onlineIds = computeOnlineBuddyIds()
+        val onlineBuddyList = buildOnlineBuddies(onlineIds)
+        val rawCount = onlineBuddyList.size
+
         val now = System.currentTimeMillis()
         val hasFriends = _friends.value.isNotEmpty()
         val withinGrace = hasCompletedFirstPresenceSync &&
@@ -420,7 +459,9 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         if (rawCount > 0) {
             zeroConfirmationJob?.cancel()
             zeroConfirmationJob = null
-            _peerCount.value = rawCount
+            _onlineBuddyIds.value = onlineIds
+            _onlineBuddies.value = onlineBuddyList
+            _peerCount.value = onlineBuddyList.size
             _isPresenceChecking.value = false
             hasCompletedFirstPresenceSync = true
             lastReachableAtMs = now
@@ -432,6 +473,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             zeroConfirmationJob?.cancel()
             zeroConfirmationJob = null
             _peerCount.value = 0
+            _onlineBuddyIds.value = emptySet()
+            _onlineBuddies.value = emptyList()
             _isPresenceChecking.value = false
             hasCompletedFirstPresenceSync = true
             logReachabilityState(reason = "${reason}_no_friends", rawCount = 0, withinGrace = false)
@@ -470,6 +513,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
 
             if (confirmedRawCount == 0 && !confirmedWithinGrace) {
                 _peerCount.value = 0
+                _onlineBuddyIds.value = emptySet()
+                _onlineBuddies.value = emptyList()
                 _isPresenceChecking.value = false
                 logReachabilityState(reason = "${reason}_offline_confirmed", rawCount = 0, withinGrace = false)
             } else {

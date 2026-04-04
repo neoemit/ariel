@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -5,6 +6,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.gms.google-services")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.github.triplet.play")
 }
 
 val localProperties = Properties().apply {
@@ -20,11 +22,35 @@ fun escapedLocalProperty(key: String): String {
         .replace("\"", "\\\"")
 }
 
+fun envOrLocalProperty(envKey: String, localKey: String): String? {
+    val envValue = System.getenv(envKey)?.trim()
+    if (!envValue.isNullOrEmpty()) {
+        return envValue
+    }
+
+    return localProperties.getProperty(localKey)?.trim()?.takeIf { it.isNotEmpty() }
+}
+
+val releaseKeystorePath = envOrLocalProperty("ANDROID_KEYSTORE_PATH", "release.storeFile")
+val releaseKeystorePassword = envOrLocalProperty("ANDROID_KEYSTORE_PASSWORD", "release.storePassword")
+val releaseKeyAlias = envOrLocalProperty("ANDROID_KEY_ALIAS", "release.keyAlias")
+val releaseKeyPassword = envOrLocalProperty("ANDROID_KEY_PASSWORD", "release.keyPassword")
+val hasReleaseSigningConfig = releaseKeystorePath != null &&
+    releaseKeystorePassword != null &&
+    releaseKeyAlias != null &&
+    releaseKeyPassword != null &&
+    File(releaseKeystorePath).exists()
+
+val playServiceAccountCredentialsPath = envOrLocalProperty(
+    "PLAY_SERVICE_ACCOUNT_JSON_PATH",
+    "play.serviceAccountCredentials"
+)
+
 android {
     namespace = "com.thomaslamendola.ariel"
     compileSdk = 35
 
-    val appVersionMinor = 32
+    val appVersionMinor = 34
 
     defaultConfig {
         applicationId = "com.thomaslamendola.ariel"
@@ -43,9 +69,27 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseSigningConfig) {
+            create("releaseUpload") {
+                storeFile = file(requireNotNull(releaseKeystorePath))
+                storePassword = requireNotNull(releaseKeystorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (hasReleaseSigningConfig) {
+                signingConfig = signingConfigs.getByName("releaseUpload")
+            }
             ndk {
                 debugSymbolLevel = "SYMBOL_TABLE"
             }
@@ -70,6 +114,14 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+
+play {
+    track.set("internal")
+    defaultToAppBundles.set(true)
+    if (!playServiceAccountCredentialsPath.isNullOrBlank()) {
+        serviceAccountCredentials.set(file(playServiceAccountCredentialsPath))
     }
 }
 

@@ -8,6 +8,8 @@
     <string name="status_checking_online">Checking Buddy Availability…</string>
     <string name="status_one_online">1 Buddy Online</string>
     <string name="status_many_online">%1$d Buddies Online</string>
+    <string name="online_buddies_title">Buddies Online</string>
+    <string name="online_buddies_empty">No buddies are currently online.</string>
     <string name="alert_active">ALERT ACTIVE</string>
     <string name="alert_notified">Your buddies have been notified</string>
     <string name="reset_panic">RESET PANIC</string>

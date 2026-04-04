@@ -20,6 +20,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -473,8 +474,10 @@ fun PanicScreen(
         }
     }
 
-    val peerCount by viewModel.peerCount.collectAsState()
     val isPresenceChecking by viewModel.isPresenceChecking.collectAsState()
+    val onlineBuddies by viewModel.onlineBuddies.collectAsState()
+    val peerCount = onlineBuddies.size
+    var showOnlineBuddiesDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -489,7 +492,9 @@ fun PanicScreen(
                 isPresenceChecking -> Color(0xFF5D4037)
                 else -> Color(0xFF333333)
             },
-            modifier = Modifier.padding(bottom = 48.dp)
+            modifier = Modifier
+                .padding(bottom = 48.dp)
+                .clickable { showOnlineBuddiesDialog = true }
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -522,6 +527,38 @@ fun PanicScreen(
                     color = Color.White
                 )
             }
+        }
+
+        if (showOnlineBuddiesDialog) {
+            AlertDialog(
+                onDismissRequest = { showOnlineBuddiesDialog = false },
+                title = { Text(ctx.getString(R.string.online_buddies_title)) },
+                text = {
+                    if (onlineBuddies.isEmpty()) {
+                        Text(
+                            text = ctx.getString(R.string.online_buddies_empty),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 320.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(onlineBuddies) { buddy ->
+                                Text(
+                                    text = buddy.displayName,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showOnlineBuddiesDialog = false }) {
+                        Text(ctx.getString(R.string.close))
+                    }
+                }
+            )
         }
 
         if (isTriggered) {

@@ -54,6 +54,22 @@ To generate an unsigned release APK for local sharing:
 The APK will be located at: `app/build/outputs/apk/release/app-release-unsigned.apk`
 *Note: For official App Store distribution, you would need to [sign the APK](https://developer.android.com/studio/publish/app-signing) with a production key.*
 
+## GitHub Actions → Google Play Internal Track
+This repo includes a release workflow at `.github/workflows/play-internal-release.yml` that builds a signed bundle and uploads it to the **internal** testing track.
+
+Required GitHub environment:
+- Environment name: `play-internal`
+- Secrets:
+  - `PLAY_SERVICE_ACCOUNT_JSON` (full Google service account JSON)
+  - `ANDROID_KEYSTORE_BASE64` (base64 of upload keystore `.jks`)
+  - `ANDROID_KEY_ALIAS`
+  - `ANDROID_KEYSTORE_PASSWORD`
+  - `ANDROID_KEY_PASSWORD`
+
+Trigger options:
+- Manual: GitHub → **Actions** → **Play Internal Release** → **Run workflow**
+- Automatic: push a git tag starting with `v` (example: `v1.34.0`)
+
 ## Internet Relay Backend (Docker Compose)
 Use this when buddies are out of Nearby range and internet/mobile data is available.
 
