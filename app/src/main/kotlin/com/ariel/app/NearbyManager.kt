@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
+import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.AdvertisingOptions
 import com.google.android.gms.nearby.connection.ConnectionInfo
@@ -25,7 +26,11 @@ class NearbyManager(private val context: Context, val myName: String) {
     private val tag = "NearbyManager"
     private val strategy = Strategy.P2P_CLUSTER
     private val serviceId = "com.thomaslamendola.ariel.PANIC_SERVICE"
-    private val reconnectDelayMs = 5_000L
+    private val reconnectDelayBaseMs = 5_000L
+    private val reconnectDelayMaxMs = 60_000L
+    private val reconnectHealthCheckDelayMs = 45_000L
+    private val nearbyStatusAlreadyAdvertising = 8001
+    private val nearbyStatusAlreadyDiscovering = 8002
 
     private val connectionsClient = Nearby.getConnectionsClient(context)
 
@@ -47,6 +52,9 @@ class NearbyManager(private val context: Context, val myName: String) {
     private var isRunning = false
     private var isAdvertising = false
     private var isDiscovering = false
+    private var isAdvertisingStartInFlight = false
+    private var isDiscoveryStartInFlight = false
+    private var reconnectAttempt = 0
 
     private fun toast(message: String) {
         mainHandler.post { Toast.makeText(context, message, Toast.LENGTH_SHORT).show() }
@@ -281,24 +289,49 @@ class NearbyManager(private val context: Context, val myName: String) {
             cancelReconnect()
             return
         }
+        if (reconnectRunnable != null) return
 
-        reconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+        val delayMs = nextReconnectDelayMs()
+        Log.d(tag, "Scheduling reconnect in ${delayMs}ms ($reason)")
         reconnectRunnable = Runnable {
+            reconnectRunnable = null
             if (!isRunning || trustedFriends.isEmpty()) return@Runnable
             if (_peers.value.isNotEmpty()) {
                 cancelReconnect()
                 return@Runnable
             }
-            Log.d(tag, "Reconnect tick ($reason)")
-            restartAdvertisingAndDiscovery("reconnect_$reason")
+
+            val radiosActive = isAdvertising && isDiscovering
+            val radiosStarting = isAdvertisingStartInFlight || isDiscoveryStartInFlight
+            if (radiosActive || radiosStarting) {
+                reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(10)
+                Log.d(tag, "Reconnect health check ($reason): radios active=$radiosActive starting=$radiosStarting")
+            } else {
+                reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(10)
+                Log.d(tag, "Reconnect tick ($reason): restarting radios")
+                restartAdvertisingAndDiscovery("reconnect_$reason")
+            }
             scheduleReconnect("loop")
         }
-        mainHandler.postDelayed(reconnectRunnable!!, reconnectDelayMs)
+        mainHandler.postDelayed(reconnectRunnable!!, delayMs)
     }
 
-    private fun cancelReconnect() {
+    private fun nextReconnectDelayMs(): Long {
+        val radiosActive = (isAdvertising || isAdvertisingStartInFlight) &&
+            (isDiscovering || isDiscoveryStartInFlight)
+        if (radiosActive) return reconnectHealthCheckDelayMs
+
+        val exponent = reconnectAttempt.coerceAtMost(4)
+        val factor = 1L shl exponent
+        return (reconnectDelayBaseMs * factor).coerceAtMost(reconnectDelayMaxMs)
+    }
+
+    private fun cancelReconnect(resetBackoff: Boolean = true) {
         reconnectRunnable?.let { mainHandler.removeCallbacks(it) }
         reconnectRunnable = null
+        if (resetBackoff) {
+            reconnectAttempt = 0
+        }
     }
 
     fun enterUrgentMode(durationMs: Long = 120_000L) {
@@ -319,37 +352,67 @@ class NearbyManager(private val context: Context, val myName: String) {
     }
 
     private fun startAdvertising() {
-        if (isAdvertising) return
+        if (isAdvertising || isAdvertisingStartInFlight) return
 
+        isAdvertisingStartInFlight = true
         val options = AdvertisingOptions.Builder().setStrategy(strategy).build()
         connectionsClient.startAdvertising(myName, serviceId, connectionLifecycleCallback, options)
             .addOnSuccessListener {
+                isAdvertisingStartInFlight = false
                 isAdvertising = true
                 Log.d(tag, "Advertising started as '$myName'")
             }
             .addOnFailureListener { error ->
-                isAdvertising = false
-                Log.e(tag, "Advertising FAILED: ${error.message}", error)
-                toast("Advertising failed: ${error.message}")
-                scheduleReconnect("advertising_failed")
+                isAdvertisingStartInFlight = false
+                if (isAlreadyAdvertisingError(error)) {
+                    isAdvertising = true
+                    Log.d(tag, "Advertising already active; suppressing duplicate start")
+                } else {
+                    isAdvertising = false
+                    Log.e(tag, "Advertising FAILED: ${error.message}", error)
+                    scheduleReconnect("advertising_failed")
+                }
             }
     }
 
     private fun startDiscovery() {
-        if (isDiscovering) return
+        if (isDiscovering || isDiscoveryStartInFlight) return
 
+        isDiscoveryStartInFlight = true
         val options = DiscoveryOptions.Builder().setStrategy(strategy).build()
         connectionsClient.startDiscovery(serviceId, endpointDiscoveryCallback, options)
             .addOnSuccessListener {
+                isDiscoveryStartInFlight = false
                 isDiscovering = true
                 Log.d(tag, "Discovery started")
             }
             .addOnFailureListener { error ->
-                isDiscovering = false
-                Log.e(tag, "Discovery FAILED: ${error.message}", error)
-                toast("Discovery failed: ${error.message}")
-                scheduleReconnect("discovery_failed")
+                isDiscoveryStartInFlight = false
+                if (isAlreadyDiscoveringError(error)) {
+                    isDiscovering = true
+                    Log.d(tag, "Discovery already active; suppressing duplicate start")
+                } else {
+                    isDiscovering = false
+                    Log.e(tag, "Discovery FAILED: ${error.message}", error)
+                    scheduleReconnect("discovery_failed")
+                }
             }
+    }
+
+    private fun isAlreadyAdvertisingError(error: Exception): Boolean {
+        val statusCode = (error as? ApiException)?.statusCode
+        val message = error.message.orEmpty().lowercase()
+        return statusCode == nearbyStatusAlreadyAdvertising ||
+            message.contains("already advertising") ||
+            message.contains("8001")
+    }
+
+    private fun isAlreadyDiscoveringError(error: Exception): Boolean {
+        val statusCode = (error as? ApiException)?.statusCode
+        val message = error.message.orEmpty().lowercase()
+        return statusCode == nearbyStatusAlreadyDiscovering ||
+            message.contains("already discovering") ||
+            message.contains("8002")
     }
 
     private fun stopNearbyRadios() {
@@ -365,6 +428,8 @@ class NearbyManager(private val context: Context, val myName: String) {
         }
         isAdvertising = false
         isDiscovering = false
+        isAdvertisingStartInFlight = false
+        isDiscoveryStartInFlight = false
     }
 
     fun addFriend(name: String) {
