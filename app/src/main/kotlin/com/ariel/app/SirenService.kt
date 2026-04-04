@@ -128,19 +128,6 @@ class SirenService : Service() {
                 nearbyManager?.clearFriends()
             }
 
-            "SIMULATED_PANIC" -> {
-                val sender = intent.getStringExtra("SENDER_NAME") ?: "Virtual Buddy"
-                Log.d("ArielService", "SIMULATED_PANIC triggered by $sender")
-                startSiren()
-                showPanicNotification(sender, PanicViewModel.ESCALATION_GENERIC)
-            }
-
-            "SIMULATED_ACK" -> {
-                val id = intent.getStringExtra("SENDER_NAME") ?: "VirtualBuddy_01"
-                Log.d("ArielService", "SIMULATED_ACK from $id")
-                handleIncomingAcknowledge(id, null)
-            }
-
             "REMOTE_PANIC_PUSH" -> {
                 startMonitoring()
                 val sender = intent.getStringExtra("SENDER_NAME") ?: return START_STICKY

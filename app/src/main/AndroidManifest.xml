@@ -48,7 +48,7 @@
         <service
             android:name=".SirenService"
             android:enabled="true"
-            android:exported="true"
+            android:exported="false"
             android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Emergency alert system for user safety and distress signaling" />

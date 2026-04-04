@@ -139,7 +139,6 @@ class NearbyManager(private val context: Context, val myName: String) {
                 endpointToName[endpointId]?.let { peerName ->
                     nameToEndpoint[peerName] = endpointId
                 }
-                notifyStatus("Connected!")
                 val peerName = endpointToName[endpointId]
                 if (peerName != null) {
                     toast("Connected to ${displayNameFor(peerName)}")
@@ -155,7 +154,6 @@ class NearbyManager(private val context: Context, val myName: String) {
                 val peerName = endpointToName[endpointId]
                 val peerDisplay = peerName?.let { displayNameFor(it) } ?: "buddy"
                 Log.e(tag, "Connection failed to $endpointId: $message (code ${result.status.statusCode})")
-                notifyStatus("Connection failed: $message")
                 toast("Connection failed with $peerDisplay: $message")
                 scheduleReconnect("connection_result_failed")
             }
@@ -174,7 +172,6 @@ class NearbyManager(private val context: Context, val myName: String) {
 
             notifyPeerCount()
             Log.d(tag, "Disconnected from $endpointId ($disconnectedName)")
-            notifyStatus("Disconnected from $disconnectedName")
             val peerDisplay = disconnectedName?.let { displayNameFor(it) } ?: "buddy"
             toast("$peerDisplay disconnected. Reconnecting...")
             scheduleReconnect("disconnected")
@@ -198,7 +195,6 @@ class NearbyManager(private val context: Context, val myName: String) {
             endpointToName[endpointId] = peerName
             if (!pendingConnectionEndpointIds.add(endpointId)) return
 
-            notifyStatus("Connecting to $peerName...")
             connectionsClient.requestConnection(myName, endpointId, connectionLifecycleCallback)
                 .addOnSuccessListener {
                     Log.d(tag, "requestConnection to $peerName succeeded")
@@ -207,7 +203,6 @@ class NearbyManager(private val context: Context, val myName: String) {
                     pendingConnectionEndpointIds.remove(endpointId)
                     endpointToName.remove(endpointId)
                     Log.e(tag, "requestConnection to $peerName FAILED: ${error.message}")
-                    notifyStatus("Connection failed: ${error.message}")
                     scheduleReconnect("request_connection_failed")
                 }
         }
@@ -220,14 +215,6 @@ class NearbyManager(private val context: Context, val myName: String) {
             }
             scheduleReconnect("endpoint_lost")
         }
-    }
-
-    private fun notifyStatus(status: String) {
-        val intent = Intent("com.thomaslamendola.ariel.STATUS_UPDATE").apply {
-            putExtra("STATUS", status)
-            setPackage(context.packageName)
-        }
-        context.sendBroadcast(intent)
     }
 
     fun startPairing() {

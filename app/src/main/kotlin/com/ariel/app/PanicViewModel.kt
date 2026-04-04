@@ -37,9 +37,6 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     private val _panicTriggerProgress = MutableStateFlow(0f)
     val panicTriggerProgress = _panicTriggerProgress.asStateFlow()
 
-    private val _status = MutableStateFlow<String?>(null)
-    val status = _status.asStateFlow()
-
     private val _lastAcknowledgment = MutableStateFlow<String?>(null)
     val lastAcknowledgment = _lastAcknowledgment.asStateFlow()
 
@@ -82,13 +79,6 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-                "com.thomaslamendola.ariel.FRIENDS_UPDATED" -> {
-                    refreshFriends()
-                    context?.startService(Intent(context, SirenService::class.java).apply {
-                        action = "START_MONITORING"
-                    })
-                }
-
                 "com.thomaslamendola.ariel.PEER_COUNT_CHANGED" -> {
                     val count = intent.getIntExtra("COUNT", 0)
                     val peers = intent.getStringArrayListExtra("PEER_IDS")
@@ -101,18 +91,6 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
                     nearbyEndpointCount.value = count
                     nearbyOnlineIds.value = peers
                     updateCombinedPeerCount(reason = "nearby_broadcast")
-                }
-
-                "com.thomaslamendola.ariel.STATUS_UPDATE" -> {
-                    val statusMsg = intent.getStringExtra("STATUS")
-                    Log.d("PanicVM", "Status update: $statusMsg")
-                    _status.value = statusMsg
-                    viewModelScope.launch {
-                        delay(3000)
-                        if (_status.value == statusMsg) {
-                            _status.value = null
-                        }
-                    }
                 }
             }
         }
@@ -150,9 +128,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
 
         val filter = IntentFilter().apply {
             addAction("com.thomaslamendola.ariel.ACKNOWLEDGED")
-            addAction("com.thomaslamendola.ariel.FRIENDS_UPDATED")
             addAction("com.thomaslamendola.ariel.PEER_COUNT_CHANGED")
-            addAction("com.thomaslamendola.ariel.STATUS_UPDATE")
         }
         ContextCompat.registerReceiver(
             context,
@@ -240,38 +216,11 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { refreshRelayPresence() }
     }
 
-    fun handlePress(isPressed: Boolean) {
-        if (!isPressed) {
-            _panicTriggerProgress.value = 0f
-            return
-        }
-
-        viewModelScope.launch {
-            val startTime = System.currentTimeMillis()
-            while (System.currentTimeMillis() - startTime < PANIC_HOLD_DURATION_MS) {
-                if (!_isPressed) break
-                val elapsed = System.currentTimeMillis() - startTime
-                _panicTriggerProgress.value = elapsed.toFloat() / PANIC_HOLD_DURATION_MS.toFloat()
-                delay(16)
-            }
-
-            if (_panicTriggerProgress.value >= 1f) {
-                triggerPanic()
-            }
-        }
-    }
-
     fun setTriggerProgress(progress: Float) {
         _panicTriggerProgress.value = progress
         if (progress >= 1f && !_isPanicTriggered.value) {
             triggerPanic()
         }
-    }
-
-    private var _isPressed = false
-    fun setPressed(pressed: Boolean) {
-        _isPressed = pressed
-        if (!pressed) _panicTriggerProgress.value = 0f
     }
 
     fun resetPanic() {
@@ -317,23 +266,6 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             prefs.edit().putString("panic_ringtone", uriString).apply()
         }
         _panicRingtoneUri.value = uriString
-    }
-
-    private fun refreshFriends() {
-        val savedFriends = persistSanitizedFriends(
-            prefs.getStringSet("friends", emptySet()) ?: emptySet()
-        )
-        _friends.value = savedFriends.toList()
-
-        val currentNicknames = mutableMapOf<String, String>()
-        savedFriends.forEach { id ->
-            prefs.getString("nickname_$id", null)?.let { currentNicknames[id] = it }
-        }
-        _nicknames.value = currentNicknames
-
-        viewModelScope.launch {
-            refreshRelayPresence()
-        }
     }
 
     fun setUiActive(active: Boolean) {
