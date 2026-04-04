@@ -3,8 +3,17 @@ name: Play Internal Release
 on:
   workflow_dispatch:
   push:
-    tags:
-      - "v*"
+    branches:
+      - "main"
+    paths:
+      - "app/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - ".github/workflows/play-internal-release.yml"
 
 permissions:
   contents: read
@@ -22,6 +31,70 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enforce versionCode bump on main pushes
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          extract_version_code() {
+            local input="$1"
+            local direct
+            direct="$(printf '%s\n' "$input" | sed -nE 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' | head -n1)"
+            if [[ -n "$direct" ]]; then
+              printf '%s\n' "$direct"
+              return 0
+            fi
+
+            local minor
+            minor="$(printf '%s\n' "$input" | sed -nE 's/^[[:space:]]*val[[:space:]]+appVersionMinor[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' | head -n1)"
+            if [[ -n "$minor" ]]; then
+              printf '%s\n' "$minor"
+              return 0
+            fi
+
+            return 1
+          }
+
+          current_file="$(cat app/build.gradle.kts)"
+          current_version_code="$(extract_version_code "$current_file")" || {
+            echo "Unable to resolve current versionCode from app/build.gradle.kts" >&2
+            exit 1
+          }
+
+          if [[ -z "${BEFORE_SHA:-}" || "$BEFORE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            echo "No previous push baseline detected; skipping versionCode bump check."
+            exit 0
+          fi
+
+          if ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            echo "Previous commit $BEFORE_SHA not available; skipping versionCode bump check."
+            exit 0
+          fi
+
+          previous_file="$(git show "${BEFORE_SHA}:app/build.gradle.kts" 2>/dev/null || true)"
+          if [[ -z "$previous_file" ]]; then
+            echo "No previous app/build.gradle.kts found at $BEFORE_SHA; skipping versionCode bump check."
+            exit 0
+          fi
+
+          previous_version_code="$(extract_version_code "$previous_file")" || {
+            echo "Unable to resolve previous versionCode from app/build.gradle.kts at $BEFORE_SHA" >&2
+            exit 1
+          }
+
+          if (( current_version_code <= previous_version_code )); then
+            echo "versionCode must increase on each push to main." >&2
+            echo "Current: $current_version_code, previous: $previous_version_code" >&2
+            exit 1
+          fi
+
+          echo "versionCode check passed: $previous_version_code -> $current_version_code"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -31,6 +104,142 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Prepare Play release notes (en-GB + en-US)
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+
+          NOTES_DIR_GB="app/src/main/play/release-notes/en-GB"
+          NOTES_DIR_US="app/src/main/play/release-notes/en-US"
+          NOTES_FILE_GB="$NOTES_DIR_GB/internal.txt"
+          NOTES_FILE_US="$NOTES_DIR_US/internal.txt"
+          ZERO_SHA="0000000000000000000000000000000000000000"
+
+          mkdir -p "$NOTES_DIR_GB" "$NOTES_DIR_US"
+
+          should_keep_manual_notes=false
+          if [[ "$EVENT_NAME" == "push" && -n "${BEFORE_SHA:-}" && "$BEFORE_SHA" != "$ZERO_SHA" ]] && git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            changed_files="$(git diff --name-only "$BEFORE_SHA" "$CURRENT_SHA" || true)"
+            if printf '%s\n' "$changed_files" | grep -Eq '^app/src/main/play/release-notes/(en-GB|en-US)/internal\.txt$'; then
+              should_keep_manual_notes=true
+            fi
+          elif [[ -s "$NOTES_FILE_GB" || -s "$NOTES_FILE_US" ]]; then
+            should_keep_manual_notes=true
+          fi
+
+          if [[ "$should_keep_manual_notes" == "true" ]]; then
+            echo "Manual release notes detected, keeping repository-authored notes."
+            if [[ ! -s "$NOTES_FILE_GB" && -s "$NOTES_FILE_US" ]]; then
+              cp "$NOTES_FILE_US" "$NOTES_FILE_GB"
+            elif [[ ! -s "$NOTES_FILE_GB" ]]; then
+              printf '%s\n' "Stability improvements and bug fixes." > "$NOTES_FILE_GB"
+            fi
+            if [[ ! -s "$NOTES_FILE_US" ]]; then
+              cp "$NOTES_FILE_GB" "$NOTES_FILE_US"
+            fi
+            exit 0
+          fi
+
+          if [[ "$EVENT_NAME" == "push" && -n "${BEFORE_SHA:-}" && "$BEFORE_SHA" != "$ZERO_SHA" ]] && git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            raw_commits="$(git log --no-merges --pretty=format:%s "${BEFORE_SHA}..${CURRENT_SHA}")"
+          else
+            raw_commits="$(git log --no-merges --pretty=format:%s -n 20)"
+          fi
+
+          mapfile -t release_lines < <(
+            printf '%s\n' "$raw_commits" \
+              | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' \
+              | sed -E 's/^(feat|fix|perf|refactor|revert|docs|chore|ci|test|build|style)(\([^)]+\))?!?:[[:space:]]*//I' \
+              | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' \
+              | awk 'NF' \
+              | awk 'BEGIN{IGNORECASE=1} !/^(chore|docs|ci|build|test|style)\b/' \
+              | awk '!seen[tolower($0)]++' \
+              | head -n 5
+          )
+
+          normalize_line() {
+            local line="$1"
+            line="$(printf '%s' "$line" | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')"
+            if [[ -z "$line" ]]; then
+              return 1
+            fi
+            local first_char="${line:0:1}"
+            line="$(printf '%s%s' "$(printf '%s' "$first_char" | tr '[:lower:]' '[:upper:]')" "${line:1}")"
+            if [[ ! "$line" =~ [.!?]$ ]]; then
+              line="${line}."
+            fi
+            printf '%s' "$line"
+          }
+
+          to_en_us() {
+            printf '%s' "$1" \
+              | sed -E \
+                -e 's/\boptimisation\b/optimization/gI' \
+                -e 's/\boptimise\b/optimize/gI' \
+                -e 's/\boptimised\b/optimized/gI' \
+                -e 's/\bbehaviour\b/behavior/gI' \
+                -e 's/\bbehaviours\b/behaviors/gI' \
+                -e 's/\bcolour\b/color/gI' \
+                -e 's/\bcolours\b/colors/gI' \
+                -e 's/\bfavour\b/favor/gI' \
+                -e 's/\bfavourite\b/favorite/gI' \
+                -e 's/\binitialise\b/initialize/gI' \
+                -e 's/\bfinalise\b/finalize/gI' \
+                -e 's/\bprioritise\b/prioritize/gI' \
+                -e 's/\borganisation\b/organization/gI' \
+                -e 's/\borganise\b/organize/gI' \
+                -e 's/\blicence\b/license/gI'
+          }
+
+          build_notes() {
+            local locale="$1"
+            local notes="Latest changes:"
+            local added="false"
+
+            for candidate_line in "${release_lines[@]}"; do
+              local normalized_line
+              normalized_line="$(normalize_line "$candidate_line" || true)"
+              if [[ -z "$normalized_line" ]]; then
+                continue
+              fi
+
+              if [[ "$locale" == "en-US" ]]; then
+                normalized_line="$(to_en_us "$normalized_line")"
+              fi
+
+              local maybe_notes="${notes}"$'\n'"• ${normalized_line}"
+              if (( ${#maybe_notes} > 500 )); then
+                continue
+              fi
+              notes="$maybe_notes"
+              added="true"
+            done
+
+            if [[ "$added" != "true" ]]; then
+              notes=$'Latest changes:\n• Stability improvements and bug fixes.'
+            fi
+
+            if (( ${#notes} > 500 )); then
+              notes="Stability improvements and bug fixes."
+            fi
+
+            printf '%s' "$notes"
+          }
+
+          gb_notes="$(build_notes "en-GB")"
+          us_notes="$(build_notes "en-US")"
+
+          printf '%s\n' "$gb_notes" > "$NOTES_FILE_GB"
+          printf '%s\n' "$us_notes" > "$NOTES_FILE_US"
+
+          echo "Generated release notes:"
+          echo "- $NOTES_FILE_GB"
+          echo "- $NOTES_FILE_US"
 
       - name: Validate required secrets
         shell: bash

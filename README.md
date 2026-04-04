@@ -69,7 +69,21 @@ Required GitHub environment:
 
 Trigger options:
 - Manual: GitHub → **Actions** → **Play Internal Release** → **Run workflow**
-- Automatic: push a git tag starting with `v` (example: `v1.34.0`)
+- Automatic: push to `main` when release-impacting files change:
+  - `app/**`
+  - `build.gradle.kts`, `settings.gradle.kts`, `gradle.properties`
+  - `gradle/**`, `gradlew`, `gradlew.bat`
+  - `.github/workflows/play-internal-release.yml`
+
+Safety guard:
+- On pushes to `main`, CI fails early if `versionCode` was not incremented versus the previous pushed commit.
+
+Release notes automation:
+- CI auto-generates Play release notes for both locales:
+  - `app/src/main/play/release-notes/en-GB/internal.txt` (primary)
+  - `app/src/main/play/release-notes/en-US/internal.txt` (US spelling variant)
+- Notes are derived from recent commit subjects, filtered to user-facing changes, and kept within Play's 500-character limit.
+- Manual override: if you commit either of the above files in the same push, CI keeps your authored notes and does not overwrite them.
 
 ## Internet Relay Backend (Docker Compose)
 Use this when buddies are out of Nearby range and internet/mobile data is available.
