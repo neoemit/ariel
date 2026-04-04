@@ -60,6 +60,7 @@ This repo includes a release workflow at `.github/workflows/play-internal-releas
 Required GitHub environment:
 - Environment name: `play-internal`
 - Secrets:
+  - `GOOGLE_SERVICES_JSON` (full `google-services.json` content)
   - `PLAY_SERVICE_ACCOUNT_JSON` (full Google service account JSON)
   - `ANDROID_KEYSTORE_BASE64` (base64 of upload keystore `.jks`)
   - `ANDROID_KEY_ALIAS`
