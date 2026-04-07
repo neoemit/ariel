@@ -4,6 +4,7 @@ import logging
 import os
 import sqlite3
 import time
+import uuid
 from typing import Dict, List, Sequence
 
 import firebase_admin
@@ -202,14 +203,35 @@ def health() -> Dict[str, str | bool]:
 
 @app.post("/v1/register-device")
 def register_device(request: RegisterDeviceRequest) -> Dict[str, str]:
+    request_id = uuid.uuid4().hex
+    started_at = time.perf_counter()
     upsert_device(request)
+    duration_ms = int((time.perf_counter() - started_at) * 1000)
+    LOGGER.info(
+        "event=register_device requestId=%s buddyId=%s appVersion=%s durationMs=%s",
+        request_id,
+        request.buddyId,
+        request.appVersion or "unknown",
+        duration_ms,
+    )
     return {"status": "registered"}
 
 
 @app.post("/v1/presence")
 def get_presence(request: PresenceRequest) -> Dict[str, int | str | List[str] | Dict[str, int]]:
+    request_id = uuid.uuid4().hex
+    started_at = time.perf_counter()
     buddy_ids = sorted({buddy_id for buddy_id in request.buddyIds if buddy_id})
     presence = get_presence_for_buddies(buddy_ids, request.staleAfterSeconds)
+    duration_ms = int((time.perf_counter() - started_at) * 1000)
+    LOGGER.info(
+        "event=presence requestId=%s linkedCount=%s onlineCount=%s staleAfterSeconds=%s durationMs=%s",
+        request_id,
+        len(buddy_ids),
+        len(presence),
+        request.staleAfterSeconds,
+        duration_ms,
+    )
 
     return {
         "status": "ok",
@@ -218,6 +240,8 @@ def get_presence(request: PresenceRequest) -> Dict[str, int | str | List[str] | 
         "onlineBuddyIds": sorted(presence.keys()),
         "lastSeen": presence,
         "staleAfterSeconds": request.staleAfterSeconds,
+        "requestId": request_id,
+        "serverTime": int(time.time()),
     }
 
 

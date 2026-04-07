@@ -50,7 +50,7 @@ android {
     namespace = "com.thomaslamendola.ariel"
     compileSdk = 35
 
-    val appVersionMinor = 42
+    val appVersionMinor = 43
 
     defaultConfig {
         applicationId = "com.thomaslamendola.ariel"
@@ -155,6 +155,8 @@ dependencies {
     // Glance for Widgets
     implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation("androidx.glance:glance-material3:1.1.1")
+
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
 
     // Coil for images
     implementation("io.coil-kt:coil-compose:2.7.0")

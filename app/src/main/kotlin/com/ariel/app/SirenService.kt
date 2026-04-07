@@ -5,14 +5,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.net.ConnectivityManager
-import android.net.Network
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
+import android.net.ConnectivityManager
+import android.net.Network
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
@@ -28,6 +28,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import java.util.UUID
 
 class SirenService : Service() {
@@ -36,9 +38,11 @@ class SirenService : Service() {
     private val monitorChannelId = "MonitorChannel"
     private val notificationId = 1001
     private val monitorNotificationId = 1002
-    private val relayHeartbeatIntervalMs = 10 * 60_000L
-    private val relayRegistrationMinIntervalMs = 10 * 60_000L
-    private val connectivityRegistrationMinIntervalMs = 30_000L
+    private val relayHeartbeatIntervalMs = 55_000L
+    private val relayRegistrationMinIntervalMs = 45_000L
+    private val connectivityRegistrationMinIntervalMs = 10_000L
+    private val relayBootstrapDelaysMs = listOf(15_000L, 30_000L)
+    private val tokenRetryBackoffMs = longArrayOf(30_000L, 60_000L, 120_000L, 300_000L)
 
     private var nearbyManager: NearbyManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -48,9 +52,14 @@ class SirenService : Service() {
     private val handledAckIds = LinkedHashSet<String>()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var relayHeartbeatJob: Job? = null
+    private var relayBootstrapRetryJob: Job? = null
+    private var tokenRefreshRetryJob: Job? = null
     private var cachedFcmToken: String? = null
     private var lastRelayRegistrationAtMs: Long = 0L
+    private var lastSuccessfulRelayRegistrationAtMs: Long = 0L
     private var lastConnectivityRegistrationAtMs: Long = 0L
+    private var relayRegistrationInFlight = false
+    private var tokenRetryAttempt = 0
     private var ackHandledForActivePanic = false
     private var networkCallbackRegistered = false
 
@@ -64,7 +73,7 @@ class SirenService : Service() {
 
             Log.d("ArielService", "Network available; forcing relay registration sync")
             startMonitoring()
-            syncPushRegistration(force = true)
+            syncPushRegistration(force = true, reason = "network_available")
             nearbyManager?.triggerPeerCountRefresh()
         }
     }
@@ -85,14 +94,14 @@ class SirenService : Service() {
             }
 
             "SYNC_PUSH_REGISTRATION" -> {
-                syncPushRegistration(force = true)
+                syncPushRegistration(force = true, reason = "manual_sync")
             }
 
             "FORCE_REACHABILITY_REFRESH" -> {
                 startMonitoring()
                 nearbyManager?.enterUrgentMode(durationMs = 30_000L)
                 nearbyManager?.triggerPeerCountRefresh()
-                syncPushRegistration(force = false)
+                syncPushRegistration(force = false, reason = "forced_reachability_refresh")
             }
 
             "STOP_SIREN" -> {
@@ -151,11 +160,7 @@ class SirenService : Service() {
         cachedFcmToken = prefs.getString(PREF_FCM_TOKEN, null)
         val myName = getOrCreateMyName(prefs)
 
-        val savedFriends = prefs.getStringSet("friends", emptySet())
-            ?.map { it.trim() }
-            ?.filter { it.isNotBlank() && !it.equals(myName, ignoreCase = true) }
-            ?.toSet()
-            ?: emptySet()
+        val savedFriends = getTrustedFriends(prefs)
         val nicknames = savedFriends.mapNotNull { buddyId ->
             prefs.getString("nickname_$buddyId", null)?.trim()?.takeIf { it.isNotBlank() }?.let { nickname ->
                 buddyId to nickname
@@ -177,9 +182,11 @@ class SirenService : Service() {
         }
         nearbyManager?.replaceTrustedState(savedFriends, nicknames)
         nearbyManager?.startPairing()
+        MonitoringSafetyWorker.schedule(applicationContext)
 
         showMonitorNotification()
-        syncPushRegistration(force = true)
+        syncPushRegistration(force = true, reason = "start_monitoring")
+        startRelayBootstrapRetries()
         startRelayHeartbeat()
     }
 
@@ -191,55 +198,145 @@ class SirenService : Service() {
         }
     }
 
-    private fun syncPushRegistration(force: Boolean) {
-        val backendUrl = RelayBackendClient.getBackendUrl(this) ?: return
-        if (backendUrl.isBlank()) return
-        if (!FirebaseBootstrap.ensureInitialized(this)) return
-
-        val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
+    private fun getTrustedFriends(prefs: android.content.SharedPreferences): Set<String> {
         val myName = getOrCreateMyName(prefs)
+        return prefs.getStringSet("friends", emptySet())
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() && !it.equals(myName, ignoreCase = true) }
+            ?.toSet()
+            ?: emptySet()
+    }
 
-        val cachedToken = cachedFcmToken ?: prefs.getString(PREF_FCM_TOKEN, null)
-        if (!cachedToken.isNullOrBlank()) {
-            cachedFcmToken = cachedToken
-            registerTokenIfNeeded(myName = myName, token = cachedToken, force = force)
-            return
-        }
-
-        runCatching {
-            FirebaseMessaging.getInstance().token
-                .addOnSuccessListener { token ->
-                    cachedFcmToken = token
-                    prefs.edit().putString(PREF_FCM_TOKEN, token).apply()
-                    registerTokenIfNeeded(myName = myName, token = token, force = true)
-                }
-                .addOnFailureListener { error ->
-                    Log.w("ArielService", "FCM token fetch failed: ${error.message}")
-                }
-        }.onFailure { error ->
-            Log.w("ArielService", "Firebase Messaging unavailable: ${error.message}")
+    private fun syncPushRegistration(force: Boolean, reason: String) {
+        serviceScope.launch {
+            performPushRegistration(force = force, reason = reason)
         }
     }
 
-    private fun registerTokenIfNeeded(myName: String, token: String, force: Boolean) {
-        val now = System.currentTimeMillis()
-        if (!force && now - lastRelayRegistrationAtMs < relayRegistrationMinIntervalMs) {
-            return
+    private suspend fun performPushRegistration(force: Boolean, reason: String): Boolean {
+        val backendUrl = RelayBackendClient.getBackendUrl(this) ?: return false
+        if (backendUrl.isBlank()) return false
+        if (!FirebaseBootstrap.ensureInitialized(this)) return false
+
+        val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
+        if (getTrustedFriends(prefs).isEmpty()) return false
+
+        val myName = getOrCreateMyName(prefs)
+        val cachedToken = cachedFcmToken ?: prefs.getString(PREF_FCM_TOKEN, null)
+        val token = if (!cachedToken.isNullOrBlank()) {
+            cachedFcmToken = cachedToken
+            cachedToken
+        } else {
+            val refreshedToken = fetchFcmToken()
+            if (refreshedToken.isNullOrBlank()) {
+                scheduleTokenRefreshRetry()
+                Log.w("ArielService", "Skipping relay registration ($reason): missing FCM token")
+                return false
+            }
+            prefs.edit().putString(PREF_FCM_TOKEN, refreshedToken).apply()
+            cachedFcmToken = refreshedToken
+            resetTokenRefreshRetry()
+            refreshedToken
         }
 
-        lastRelayRegistrationAtMs = now
-        serviceScope.launch {
-            RelayBackendClient.registerDevice(this@SirenService, myName, token)
+        val now = System.currentTimeMillis()
+        if (!force && now - lastRelayRegistrationAtMs < relayRegistrationMinIntervalMs) {
+            return true
         }
+
+        if (relayRegistrationInFlight) return false
+        relayRegistrationInFlight = true
+
+        return runCatching {
+            RelayBackendClient.registerDevice(
+                context = this@SirenService,
+                buddyId = myName,
+                token = token
+            )
+        }.onFailure { error ->
+            Log.w("ArielService", "Relay registration failed ($reason): ${error.message}")
+        }.getOrDefault(false).also { success ->
+            relayRegistrationInFlight = false
+            if (success) {
+                lastRelayRegistrationAtMs = now
+                lastSuccessfulRelayRegistrationAtMs = now
+                resetTokenRefreshRetry()
+                Log.d("ArielService", "Relay registration succeeded ($reason)")
+            } else {
+                Log.w("ArielService", "Relay registration unsuccessful ($reason)")
+            }
+        }
+    }
+
+    private suspend fun fetchFcmToken(): String? {
+        return runCatching {
+            suspendCancellableCoroutine { continuation ->
+                FirebaseMessaging.getInstance().token
+                    .addOnSuccessListener { token ->
+                        if (continuation.isActive) continuation.resume(token)
+                    }
+                    .addOnFailureListener { error ->
+                        if (continuation.isActive) {
+                            continuation.resume(null)
+                            Log.w("ArielService", "FCM token fetch failed: ${error.message}")
+                        }
+                    }
+            }
+        }.onFailure { error ->
+            Log.w("ArielService", "Firebase Messaging unavailable: ${error.message}")
+        }.getOrNull()
+    }
+
+    private fun scheduleTokenRefreshRetry() {
+        if (tokenRefreshRetryJob?.isActive == true) return
+        val attemptIndex = tokenRetryAttempt.coerceIn(0, tokenRetryBackoffMs.lastIndex)
+        val delayMs = tokenRetryBackoffMs[attemptIndex]
+        tokenRetryAttempt = (attemptIndex + 1).coerceAtMost(tokenRetryBackoffMs.lastIndex)
+        tokenRefreshRetryJob = serviceScope.launch {
+            delay(delayMs)
+            tokenRefreshRetryJob = null
+            performPushRegistration(force = true, reason = "token_retry")
+        }
+    }
+
+    private fun resetTokenRefreshRetry() {
+        tokenRefreshRetryJob?.cancel()
+        tokenRefreshRetryJob = null
+        tokenRetryAttempt = 0
+    }
+
+    private fun startRelayBootstrapRetries() {
+        if (relayBootstrapRetryJob?.isActive == true) return
+        relayBootstrapRetryJob = serviceScope.launch {
+            for ((index, delayMs) in relayBootstrapDelaysMs.withIndex()) {
+                delay(delayMs)
+                val recentSuccess = System.currentTimeMillis() - lastSuccessfulRelayRegistrationAtMs < relayRegistrationMinIntervalMs
+                if (recentSuccess) break
+
+                val success = performPushRegistration(
+                    force = true,
+                    reason = "bootstrap_retry_${index + 1}"
+                )
+                if (success) break
+            }
+            relayBootstrapRetryJob = null
+        }
+    }
+
+    private fun shouldHeartbeatRelay(): Boolean {
+        val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
+        val backendConfigured = !RelayBackendClient.getBackendUrl(this).isNullOrBlank()
+        return backendConfigured && getTrustedFriends(prefs).isNotEmpty()
     }
 
     private fun startRelayHeartbeat() {
         if (relayHeartbeatJob?.isActive == true) return
-
         relayHeartbeatJob = serviceScope.launch {
             while (isActive) {
                 delay(relayHeartbeatIntervalMs)
-                syncPushRegistration(force = false)
+                if (shouldHeartbeatRelay()) {
+                    performPushRegistration(force = false, reason = "heartbeat")
+                }
             }
         }
     }
@@ -536,6 +633,10 @@ class SirenService : Service() {
         wakeLock = null
         relayHeartbeatJob?.cancel()
         relayHeartbeatJob = null
+        relayBootstrapRetryJob?.cancel()
+        relayBootstrapRetryJob = null
+        tokenRefreshRetryJob?.cancel()
+        tokenRefreshRetryJob = null
         serviceScope.cancel()
     }
 

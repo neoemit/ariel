@@ -61,6 +61,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     private var hasCompletedFirstPresenceSync = false
     private var lastReachableAtMs: Long = 0L
     private var lastForcedReconciliationAtMs: Long = 0L
+    private var lastRelayPresenceSuccessAtMs: Long = 0L
+    private var isRelayPresenceStale = true
     private var isUiActive = false
     private val appReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -86,10 +88,14 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
                         ?.filter { it.isNotBlank() }
                         ?.toSet()
                         ?: emptySet()
+                    val previousNearby = nearbyOnlineIds.value
 
                     Log.d("PanicVM", "Nearby peer update: count=$count peers=$peers")
                     nearbyEndpointCount.value = count
                     nearbyOnlineIds.value = peers
+                    if (previousNearby.isNotEmpty() && peers.isEmpty()) {
+                        requestImmediateReconciliation(reason = "nearby_drop")
+                    }
                     updateCombinedPeerCount(reason = "nearby_broadcast")
                 }
             }
@@ -244,6 +250,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         _friends.value = emptyList()
         _nicknames.value = emptyMap()
         relayOnlineIds.value = emptySet()
+        isRelayPresenceStale = true
         nearbyOnlineIds.value = emptySet()
         _onlineBuddyIds.value = emptySet()
         _onlineBuddies.value = emptyList()
@@ -300,6 +307,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         val friendsSnapshot = _friends.value.filter { it.isNotBlank() }
         if (friendsSnapshot.isEmpty() || RelayBackendClient.getBackendUrl(context).isNullOrBlank()) {
             relayOnlineIds.value = emptySet()
+            isRelayPresenceStale = true
             hasCompletedFirstPresenceSync = true
             updateCombinedPeerCount(reason = "relay_skipped")
             return
@@ -313,10 +321,13 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             )
         }.onSuccess { onlineIds ->
             relayOnlineIds.value = onlineIds.filter { friendsSnapshot.contains(it) }.toSet()
+            isRelayPresenceStale = false
+            lastRelayPresenceSuccessAtMs = System.currentTimeMillis()
             hasCompletedFirstPresenceSync = true
             updateCombinedPeerCount(reason = "relay_success")
         }.onFailure { error ->
             Log.w("PanicVM", "Relay presence refresh failed: ${error.message}")
+            isRelayPresenceStale = true
             hasCompletedFirstPresenceSync = true
             updateCombinedPeerCount(reason = "relay_failure")
         }
@@ -329,7 +340,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             .toSet()
         if (friendsSet.isEmpty()) return emptySet()
 
-        return (nearbyOnlineIds.value + relayOnlineIds.value)
+        val freshRelayIds = if (isRelayPresenceStale) emptySet() else relayOnlineIds.value
+        return (nearbyOnlineIds.value + freshRelayIds)
             .asSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() && it in friendsSet }
@@ -367,11 +379,17 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun logReachabilityState(reason: String, rawCount: Int, withinGrace: Boolean) {
+        val relayAgeMs = if (lastRelayPresenceSuccessAtMs > 0L) {
+            System.currentTimeMillis() - lastRelayPresenceSuccessAtMs
+        } else {
+            -1L
+        }
         Log.d(
             "PanicVM",
             "reachability_state reason=$reason rawCount=$rawCount displayed=${_peerCount.value} " +
                 "nearbyEndpoints=${nearbyEndpointCount.value} nearbyIds=${nearbyOnlineIds.value.size} " +
-                "relayIds=${relayOnlineIds.value.size} onlineIds=${_onlineBuddyIds.value.size} grace=$withinGrace checking=${_isPresenceChecking.value} " +
+                "relayIds=${relayOnlineIds.value.size} relayStale=$isRelayPresenceStale relayAgeMs=$relayAgeMs " +
+                "onlineIds=${_onlineBuddyIds.value.size} grace=$withinGrace checking=${_isPresenceChecking.value} " +
                 "firstSyncCompleted=$hasCompletedFirstPresenceSync"
         )
     }
@@ -484,9 +502,9 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         const val PANIC_HOLD_DURATION_MS = 1_500L
-        const val PRESENCE_POLL_INTERVAL_MS = 120_000L
-        const val PRESENCE_STALE_AFTER_SECONDS = 1_200
-        const val OFFLINE_GRACE_WINDOW_MS = 180_000L
+        const val PRESENCE_POLL_INTERVAL_MS = 25_000L
+        const val PRESENCE_STALE_AFTER_SECONDS = 180
+        const val OFFLINE_GRACE_WINDOW_MS = 120_000L
         const val PRESENCE_ZERO_CONFIRM_DELAY_MS = 2_500L
         const val FORCE_RECONCILIATION_MIN_INTERVAL_MS = 5_000L
         const val ESCALATION_GENERIC = "GENERIC"

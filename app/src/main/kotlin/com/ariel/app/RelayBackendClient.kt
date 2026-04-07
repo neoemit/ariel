@@ -73,13 +73,13 @@ object RelayBackendClient {
         }
     }
 
-    suspend fun registerDevice(context: Context, buddyId: String, token: String) {
-        if (buddyId.isBlank() || token.isBlank()) return
+    suspend fun registerDevice(context: Context, buddyId: String, token: String): Boolean {
+        if (buddyId.isBlank() || token.isBlank()) return false
         val appVersion = runCatching {
             @Suppress("DEPRECATION")
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
         }.getOrNull()
-        postJson(
+        val response = postJsonForResponse(
             context = context,
             endpoint = "/v1/register-device",
             body = JSONObject().apply {
@@ -88,6 +88,7 @@ object RelayBackendClient {
                 put("appVersion", appVersion)
             }
         )
+        return response?.first in 200..299
     }
 
     suspend fun sendPanic(
