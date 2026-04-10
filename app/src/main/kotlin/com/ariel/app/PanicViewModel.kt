@@ -104,6 +104,10 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _panicRingtoneUri = MutableStateFlow(prefs.getString("panic_ringtone", null))
     val panicRingtoneUri = _panicRingtoneUri.asStateFlow()
+    private val _discreetModeEnabled = MutableStateFlow(
+        prefs.getBoolean(PREF_DISCREET_MODE_ENABLED, false)
+    )
+    val discreetModeEnabled = _discreetModeEnabled.asStateFlow()
 
     private val _nicknames = MutableStateFlow<Map<String, String>>(emptyMap())
     val nicknames = _nicknames.asStateFlow()
@@ -273,6 +277,11 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             prefs.edit().putString("panic_ringtone", uriString).apply()
         }
         _panicRingtoneUri.value = uriString
+    }
+
+    fun setDiscreetModeEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(PREF_DISCREET_MODE_ENABLED, enabled).apply()
+        _discreetModeEnabled.value = enabled
     }
 
     fun setUiActive(active: Boolean) {
@@ -501,6 +510,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     companion object {
+        const val PREF_DISCREET_MODE_ENABLED = "discreet_mode_enabled"
         const val PANIC_HOLD_DURATION_MS = 1_500L
         const val PRESENCE_POLL_INTERVAL_MS = 25_000L
         const val PRESENCE_STALE_AFTER_SECONDS = 180

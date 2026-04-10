@@ -63,6 +63,12 @@
     <string name="settings_relay_not_configured">Relay not configured</string>
     <string name="settings_relay_invalid_url">Enter a valid http:// or https:// relay URL.</string>
     <string name="settings_sound_section_desc">Choose the alarm sound that should play for incoming panic alerts.</string>
+    <string name="settings_discreet_mode_title">Discreet mode</string>
+    <string name="settings_discreet_mode_desc">Keep panic and acknowledgment alerts silent with vibration only, even if DND is active.</string>
+    <string name="settings_discreet_mode_sound_note">Alert sound is temporarily ignored while Discreet mode is enabled.</string>
+    <string name="settings_discreet_mode_sound_off">Off (Discreet mode)</string>
+    <string name="settings_discreet_mode_enabled">Enabled</string>
+    <string name="settings_discreet_mode_disabled">Disabled</string>
     <string name="settings_danger_zone">Danger zone</string>
     <string name="settings_danger_zone_desc">Reset all buddy links and clear local pairing data on this device.</string>
     <string name="permissions_section_title">Permissions</string>

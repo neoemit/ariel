@@ -17,6 +17,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessaging
@@ -34,8 +37,12 @@ import java.util.UUID
 
 class SirenService : Service() {
     private var mediaPlayer: MediaPlayer? = null
-    private val channelId = "PanicChannel"
     private val monitorChannelId = "MonitorChannel"
+    private val panicChannelLoudId = "PanicChannelLoud"
+    private val panicChannelDiscreetId = "PanicChannelDiscreet"
+    private val ackChannelLoudId = "AckChannelLoud"
+    private val ackChannelDiscreetId = "AckChannelDiscreet"
+    private val discreetVibrationPattern = longArrayOf(0L, 450L, 300L)
     private val notificationId = 1001
     private val monitorNotificationId = 1002
     private val relayHeartbeatIntervalMs = 55_000L
@@ -46,6 +53,7 @@ class SirenService : Service() {
 
     private var nearbyManager: NearbyManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var vibrator: Vibrator? = null
     private var currentPanicSender: String? = null
     private var currentPanicEventId: String? = null
     private val handledEventIds = LinkedHashSet<String>()
@@ -381,11 +389,12 @@ class SirenService : Service() {
             return
         }
 
+        val discreetModeEnabled = isDiscreetModeEnabled()
         ackHandledForActivePanic = false
         currentPanicSender = sender
         currentPanicEventId = eventId
-        startSiren()
-        showPanicNotification(sender, escalationType)
+        startSiren(discreetModeEnabled)
+        showPanicNotification(sender, escalationType, discreetModeEnabled)
     }
 
     private fun handleIncomingAcknowledge(acknowledger: String, eventId: String?) {
@@ -460,7 +469,12 @@ class SirenService : Service() {
         startForeground(monitorNotificationId, notification)
     }
 
-    private fun startSiren() {
+    private fun startSiren(discreetModeEnabled: Boolean) {
+        if (discreetModeEnabled) {
+            startDiscreetVibration()
+            return
+        }
+
         val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
         audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
@@ -500,10 +514,36 @@ class SirenService : Service() {
         }
     }
 
+    private fun startDiscreetVibration() {
+        if (vibrator == null) {
+            vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                getSystemService(VibratorManager::class.java)?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+        }
+
+        val alarmVibrator = vibrator ?: return
+        if (!alarmVibrator.hasVibrator()) return
+
+        val effect = VibrationEffect.createWaveform(discreetVibrationPattern, 0)
+        runCatching {
+            alarmVibrator.vibrate(effect)
+        }.onFailure { error ->
+            Log.w("ArielService", "Failed to start discreet vibration: ${error.message}")
+        }
+    }
+
+    private fun stopDiscreetVibration() {
+        runCatching { vibrator?.cancel() }
+    }
+
     private fun stopSiren() {
         mediaPlayer?.stop()
         mediaPlayer?.release()
         mediaPlayer = null
+        stopDiscreetVibration()
         wakeLock?.let {
             if (it.isHeld) it.release()
         }
@@ -531,7 +571,7 @@ class SirenService : Service() {
         nearbyManager?.triggerPeerCountRefresh()
     }
 
-    private fun showPanicNotification(senderName: String, escalationType: String) {
+    private fun showPanicNotification(senderName: String, escalationType: String, discreetModeEnabled: Boolean) {
         val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
         val nickname = prefs.getString("nickname_$senderName", null)
         val displayName = nickname ?: senderName
@@ -548,15 +588,24 @@ class SirenService : Service() {
         }
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val panicChannelId = if (discreetModeEnabled) panicChannelDiscreetId else panicChannelLoudId
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                channelId,
-                "Panic Alerts",
+                panicChannelId,
+                if (discreetModeEnabled) "Panic Alerts (Discreet)" else "Panic Alerts",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Loud alerts for panic signals"
+                description = if (discreetModeEnabled) {
+                    "Silent panic alerts with vibration only"
+                } else {
+                    "Loud alerts for panic signals"
+                }
                 enableVibration(true)
+                vibrationPattern = discreetVibrationPattern
                 setBypassDnd(true)
+                if (discreetModeEnabled) {
+                    setSound(null, null)
+                }
             }
             notificationManager.createNotificationChannel(channel)
         }
@@ -571,7 +620,7 @@ class SirenService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, channelId)
+        val notification = NotificationCompat.Builder(this, panicChannelId)
             .setContentTitle("ARIEL PANIC ALERT $emoji")
             .setContentText(reasonText)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
@@ -592,18 +641,29 @@ class SirenService : Service() {
 
     private fun showAckNotification(acknowledgerId: String) {
         val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
+        val discreetModeEnabled = isDiscreetModeEnabled()
         val nickname = prefs.getString("nickname_$acknowledgerId", null)
         val displayName = nickname ?: acknowledgerId
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val ackChannelId = "AckChannel"
+        val ackChannelId = if (discreetModeEnabled) ackChannelDiscreetId else ackChannelLoudId
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 ackChannelId,
-                "Acknowledgments",
+                if (discreetModeEnabled) "Acknowledgments (Discreet)" else "Acknowledgments",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Notifications when friends acknowledge your alert"
+                description = if (discreetModeEnabled) {
+                    "Silent acknowledgments with vibration only"
+                } else {
+                    "Notifications when friends acknowledge your alert"
+                }
+                enableVibration(true)
+                vibrationPattern = discreetVibrationPattern
+                setBypassDnd(true)
+                if (discreetModeEnabled) {
+                    setSound(null, null)
+                }
             }
             notificationManager.createNotificationChannel(channel)
         }
@@ -621,12 +681,19 @@ class SirenService : Service() {
 
     companion object {
         private const val PREF_FCM_TOKEN = "fcm_token"
+        private const val PREF_DISCREET_MODE_ENABLED = PanicViewModel.PREF_DISCREET_MODE_ENABLED
+    }
+
+    private fun isDiscreetModeEnabled(): Boolean {
+        val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
+        return prefs.getBoolean(PREF_DISCREET_MODE_ENABLED, false)
     }
 
     override fun onDestroy() {
         super.onDestroy()
         unregisterNetworkCallback()
         nearbyManager?.stopPairing()
+        stopDiscreetVibration()
         wakeLock?.let {
             if (it.isHeld) it.release()
         }

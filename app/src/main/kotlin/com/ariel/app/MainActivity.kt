@@ -21,6 +21,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -46,6 +47,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -787,6 +790,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val ringtoneUri by viewModel.panicRingtoneUri.collectAsState()
+    val discreetModeEnabled by viewModel.discreetModeEnabled.collectAsState()
     val relayBackendUrl by viewModel.relayBackendUrl.collectAsState()
     val ringtoneName = remember(ringtoneUri) {
         if (ringtoneUri == null) {
@@ -833,6 +837,11 @@ fun SettingsScreen(
     }
 
     val relayConfigured = relayBackendUrl.isNotBlank()
+    val alertSoundDisplayName = if (discreetModeEnabled) {
+        context.getString(R.string.settings_discreet_mode_sound_off)
+    } else {
+        ringtoneName
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -993,7 +1002,7 @@ fun SettingsScreen(
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = context.getString(R.string.alert_sound, ringtoneName),
+                            text = context.getString(R.string.alert_sound, alertSoundDisplayName),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -1005,6 +1014,57 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .toggleable(
+                                    value = discreetModeEnabled,
+                                    onValueChange = viewModel::setDiscreetModeEnabled,
+                                    role = Role.Switch
+                                )
+                                .semantics {
+                                    contentDescription = context.getString(R.string.settings_discreet_mode_title)
+                                    stateDescription = if (discreetModeEnabled) {
+                                        context.getString(R.string.settings_discreet_mode_enabled)
+                                    } else {
+                                        context.getString(R.string.settings_discreet_mode_disabled)
+                                    }
+                                }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = context.getString(R.string.settings_discreet_mode_title),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = context.getString(R.string.settings_discreet_mode_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = discreetModeEnabled,
+                                onCheckedChange = null
+                            )
+                        }
+                    }
+
+                    if (discreetModeEnabled) {
+                        Text(
+                            text = context.getString(R.string.settings_discreet_mode_sound_note),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
                     FilledTonalButton(
                         onClick = {
                             val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
@@ -1015,6 +1075,7 @@ fun SettingsScreen(
                             }
                             ringtoneLauncher.launch(intent)
                         },
+                        enabled = !discreetModeEnabled,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(context.getString(R.string.choose_alert_sound))
