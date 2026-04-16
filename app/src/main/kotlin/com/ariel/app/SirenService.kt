@@ -395,6 +395,7 @@ class SirenService : Service() {
         currentPanicEventId = eventId
         startSiren(discreetModeEnabled)
         showPanicNotification(sender, escalationType, discreetModeEnabled)
+        broadcastPanicAlertState(active = true, senderId = sender)
     }
 
     private fun handleIncomingAcknowledge(acknowledger: String, eventId: String?) {
@@ -566,6 +567,7 @@ class SirenService : Service() {
         currentPanicSender = null
         currentPanicEventId = null
         ackHandledForActivePanic = false
+        broadcastPanicAlertState(active = false, senderId = null)
 
         showMonitorNotification()
         nearbyManager?.triggerPeerCountRefresh()
@@ -637,6 +639,7 @@ class SirenService : Service() {
             }
 
         startForeground(notificationId, notification)
+        notificationManager.notify(notificationId, notification)
     }
 
     private fun showAckNotification(acknowledgerId: String) {
@@ -682,6 +685,9 @@ class SirenService : Service() {
     companion object {
         private const val PREF_FCM_TOKEN = "fcm_token"
         private const val PREF_DISCREET_MODE_ENABLED = PanicViewModel.PREF_DISCREET_MODE_ENABLED
+        const val ACTION_PANIC_ALERT_STATE = "com.thomaslamendola.ariel.PANIC_ALERT_STATE"
+        const val EXTRA_ALERT_ACTIVE = "EXTRA_ALERT_ACTIVE"
+        const val EXTRA_ALERT_SENDER_ID = "EXTRA_ALERT_SENDER_ID"
     }
 
     private fun isDiscreetModeEnabled(): Boolean {
@@ -689,11 +695,21 @@ class SirenService : Service() {
         return prefs.getBoolean(PREF_DISCREET_MODE_ENABLED, false)
     }
 
+    private fun broadcastPanicAlertState(active: Boolean, senderId: String?) {
+        val intent = Intent(ACTION_PANIC_ALERT_STATE).apply {
+            putExtra(EXTRA_ALERT_ACTIVE, active)
+            putExtra(EXTRA_ALERT_SENDER_ID, senderId)
+            setPackage(packageName)
+        }
+        sendBroadcast(intent)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         unregisterNetworkCallback()
         nearbyManager?.stopPairing()
         stopDiscreetVibration()
+        broadcastPanicAlertState(active = false, senderId = null)
         wakeLock?.let {
             if (it.isHeld) it.release()
         }

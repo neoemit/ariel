@@ -39,6 +39,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _lastAcknowledgment = MutableStateFlow<String?>(null)
     val lastAcknowledgment = _lastAcknowledgment.asStateFlow()
+    private val _incomingPanicSender = MutableStateFlow<String?>(null)
+    val incomingPanicSender = _incomingPanicSender.asStateFlow()
 
     private val _friends = MutableStateFlow<List<String>>(emptyList())
     val friends = _friends.asStateFlow()
@@ -98,6 +100,21 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     updateCombinedPeerCount(reason = "nearby_broadcast")
                 }
+
+                SirenService.ACTION_PANIC_ALERT_STATE -> {
+                    val active = intent.getBooleanExtra(SirenService.EXTRA_ALERT_ACTIVE, false)
+                    if (!active) {
+                        _incomingPanicSender.value = null
+                        return
+                    }
+                    val senderId = intent.getStringExtra(SirenService.EXTRA_ALERT_SENDER_ID).orEmpty()
+                    if (senderId.isBlank()) {
+                        _incomingPanicSender.value = null
+                        return
+                    }
+                    val senderDisplay = _nicknames.value[senderId] ?: senderId
+                    _incomingPanicSender.value = senderDisplay
+                }
             }
         }
     }
@@ -139,6 +156,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         val filter = IntentFilter().apply {
             addAction("com.thomaslamendola.ariel.ACKNOWLEDGED")
             addAction("com.thomaslamendola.ariel.PEER_COUNT_CHANGED")
+            addAction(SirenService.ACTION_PANIC_ALERT_STATE)
         }
         ContextCompat.registerReceiver(
             context,
@@ -237,6 +255,12 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         _isPanicTriggered.value = false
         _panicTriggerProgress.value = 0f
         _selectedEscalation.value = ESCALATION_GENERIC
+    }
+
+    fun acknowledgeIncomingAlert() {
+        context.startService(Intent(context, SirenService::class.java).apply {
+            action = "STOP_SIREN"
+        })
     }
 
     fun setEscalationMode(escalationType: String) {

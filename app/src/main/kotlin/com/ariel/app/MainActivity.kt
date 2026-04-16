@@ -134,6 +134,7 @@ fun PanicScreen(
 
     val isPresenceChecking by viewModel.isPresenceChecking.collectAsState()
     val onlineBuddies by viewModel.onlineBuddies.collectAsState()
+    val incomingPanicSender by viewModel.incomingPanicSender.collectAsState()
     val peerCount = onlineBuddies.size
     var showOnlineBuddiesDialog by remember { mutableStateOf(false) }
 
@@ -217,6 +218,43 @@ fun PanicScreen(
                     }
                 }
             )
+        }
+
+        incomingPanicSender?.let { sender ->
+            ElevatedCard(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.75f)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = ctx.getString(R.string.incoming_alert_active_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = ctx.getString(R.string.incoming_alert_active_body, sender),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Button(
+                        onClick = { viewModel.acknowledgeIncomingAlert() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(ctx.getString(R.string.incoming_alert_ack_action))
+                    }
+                }
+            }
         }
 
         if (isTriggered) {
