@@ -30,6 +30,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wifi
@@ -1057,9 +1059,14 @@ fun SettingsScreen(
                             )
                         }
 
-                        TextButton(onClick = { relaySectionExpanded = !relaySectionExpanded }) {
-                            Text(
-                                text = if (relaySectionExpanded) {
+                        IconButton(onClick = { relaySectionExpanded = !relaySectionExpanded }) {
+                            Icon(
+                                imageVector = if (relaySectionExpanded) {
+                                    Icons.Default.ExpandLess
+                                } else {
+                                    Icons.Default.ExpandMore
+                                },
+                                contentDescription = if (relaySectionExpanded) {
                                     context.getString(R.string.settings_relay_collapse)
                                 } else {
                                     context.getString(R.string.settings_relay_expand)
