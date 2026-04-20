@@ -427,6 +427,18 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    private fun broadcastOnlineBuddySummary(onlineIds: Set<String>) {
+        val normalizedIds = onlineIds
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+        val intent = Intent(SirenService.ACTION_ONLINE_BUDDY_COUNT_CHANGED).apply {
+            putStringArrayListExtra(SirenService.EXTRA_ONLINE_BUDDY_IDS, ArrayList(normalizedIds))
+            setPackage(context.packageName)
+        }
+        context.sendBroadcast(intent)
+    }
+
     private fun updateCombinedPeerCount(reason: String) {
         val onlineIds = computeOnlineBuddyIds()
         val onlineBuddyList = buildOnlineBuddies(onlineIds)
@@ -448,6 +460,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             _isPresenceChecking.value = false
             hasCompletedFirstPresenceSync = true
             lastReachableAtMs = now
+            broadcastOnlineBuddySummary(onlineIds)
             logReachabilityState(reason = "${reason}_reachable", rawCount = rawCount, withinGrace = false)
             return
         }
@@ -460,6 +473,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             _onlineBuddies.value = emptyList()
             _isPresenceChecking.value = false
             hasCompletedFirstPresenceSync = true
+            broadcastOnlineBuddySummary(emptySet())
             logReachabilityState(reason = "${reason}_no_friends", rawCount = 0, withinGrace = false)
             return
         }
@@ -499,6 +513,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
                 _onlineBuddyIds.value = emptySet()
                 _onlineBuddies.value = emptyList()
                 _isPresenceChecking.value = false
+                broadcastOnlineBuddySummary(emptySet())
                 logReachabilityState(reason = "${reason}_offline_confirmed", rawCount = 0, withinGrace = false)
             } else {
                 logReachabilityState(reason = "${reason}_offline_recovered", rawCount = confirmedRawCount, withinGrace = confirmedWithinGrace)
