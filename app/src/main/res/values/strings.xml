@@ -4,6 +4,11 @@
     <string name="nav_pairing">Pairing</string>
     <string name="nav_settings">Settings</string>
 
+    <plurals name="notification_monitor_buddy_count">
+        <item quantity="one">Listening for signals from 1 buddy</item>
+        <item quantity="other">Listening for signals from %d buddies</item>
+    </plurals>
+
     <string name="status_none_online">No Buddies Online</string>
     <string name="status_checking_online">Checking Buddy Availability…</string>
     <string name="status_one_online">1 Buddy Online</string>
@@ -64,6 +69,8 @@
     <string name="settings_relay_section_desc">Keep internet relay configured so buddies remain reachable beyond Bluetooth/WiFi range.</string>
     <string name="settings_relay_configured">Relay configured</string>
     <string name="settings_relay_not_configured">Relay not configured</string>
+    <string name="settings_relay_expand">Expand</string>
+    <string name="settings_relay_collapse">Collapse</string>
     <string name="settings_relay_invalid_url">Enter a valid http:// or https:// relay URL.</string>
     <string name="settings_sound_section_desc">Choose the alarm sound that should play for incoming panic alerts.</string>
     <string name="settings_discreet_mode_title">Discreet mode</string>

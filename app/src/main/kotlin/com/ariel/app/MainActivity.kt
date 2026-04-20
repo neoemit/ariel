@@ -30,6 +30,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wifi
@@ -849,6 +851,7 @@ fun SettingsScreen(
     }
     var relayBackendUrlInput by remember(relayBackendUrl) { mutableStateOf(relayBackendUrl) }
     var showResetDialog by remember { mutableStateOf(false) }
+    var relaySectionExpanded by remember { mutableStateOf(false) }
 
     val hasRelayChanges by remember(relayBackendUrlInput, relayBackendUrl) {
         derivedStateOf {
@@ -894,6 +897,7 @@ fun SettingsScreen(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // 1) App preferences
         item {
             ElevatedCard(shape = RoundedCornerShape(24.dp)) {
                 Column(
@@ -932,104 +936,7 @@ fun SettingsScreen(
             }
         }
 
-        item {
-            PermissionStatusCard(
-                permissionGroups = permissionGroups,
-                missingPermissions = missingPermissions,
-                onRequestPermissions = onRequestPermissions,
-                onOpenAppSettings = onOpenAppSettings
-            )
-        }
-
-        item {
-            ElevatedCard(shape = RoundedCornerShape(20.dp)) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Wifi,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = context.getString(R.string.relay_url_title),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = if (relayConfigured) {
-                            MaterialTheme.colorScheme.secondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        }
-                    ) {
-                        Text(
-                            text = if (relayConfigured) {
-                                context.getString(R.string.settings_relay_configured)
-                            } else {
-                                context.getString(R.string.settings_relay_not_configured)
-                            },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (relayConfigured) {
-                                MaterialTheme.colorScheme.onSecondaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
-                    }
-
-                    Text(
-                        text = context.getString(R.string.settings_relay_section_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    OutlinedTextField(
-                        value = relayBackendUrlInput,
-                        onValueChange = { relayBackendUrlInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(context.getString(R.string.relay_url_label)) },
-                        placeholder = { Text(context.getString(R.string.relay_url_placeholder)) },
-                        singleLine = true,
-                        isError = !relayUrlValid
-                    )
-
-                    if (!relayUrlValid) {
-                        Text(
-                            text = context.getString(R.string.settings_relay_invalid_url),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    } else {
-                        Text(
-                            text = context.getString(R.string.relay_url_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Button(
-                        onClick = { viewModel.setRelayBackendUrl(relayBackendUrlInput) },
-                        enabled = hasRelayChanges && relayUrlValid,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(context.getString(R.string.save_relay_url))
-                    }
-                }
-            }
-        }
-
+        // 2) Alert sound
         item {
             ElevatedCard(shape = RoundedCornerShape(20.dp)) {
                 Column(
@@ -1130,6 +1037,130 @@ fun SettingsScreen(
             }
         }
 
+        // 3) Internet relay (collapsed by default, expandable)
+        item {
+            ElevatedCard(shape = RoundedCornerShape(20.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Wifi,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = context.getString(R.string.relay_url_title),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        IconButton(onClick = { relaySectionExpanded = !relaySectionExpanded }) {
+                            Icon(
+                                imageVector = if (relaySectionExpanded) {
+                                    Icons.Default.ExpandLess
+                                } else {
+                                    Icons.Default.ExpandMore
+                                },
+                                contentDescription = if (relaySectionExpanded) {
+                                    context.getString(R.string.settings_relay_collapse)
+                                } else {
+                                    context.getString(R.string.settings_relay_expand)
+                                }
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = if (relayConfigured) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        }
+                    ) {
+                        Text(
+                            text = if (relayConfigured) {
+                                context.getString(R.string.settings_relay_configured)
+                            } else {
+                                context.getString(R.string.settings_relay_not_configured)
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (relayConfigured) {
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+
+                    Text(
+                        text = context.getString(R.string.settings_relay_section_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (relaySectionExpanded) {
+                        OutlinedTextField(
+                            value = relayBackendUrlInput,
+                            onValueChange = { relayBackendUrlInput = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(context.getString(R.string.relay_url_label)) },
+                            placeholder = { Text(context.getString(R.string.relay_url_placeholder)) },
+                            singleLine = true,
+                            isError = !relayUrlValid
+                        )
+
+                        if (!relayUrlValid) {
+                            Text(
+                                text = context.getString(R.string.settings_relay_invalid_url),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        } else {
+                            Text(
+                                text = context.getString(R.string.relay_url_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Button(
+                            onClick = { viewModel.setRelayBackendUrl(relayBackendUrlInput) },
+                            enabled = hasRelayChanges && relayUrlValid,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(context.getString(R.string.save_relay_url))
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4) Permissions
+        item {
+            PermissionStatusCard(
+                permissionGroups = permissionGroups,
+                missingPermissions = missingPermissions,
+                onRequestPermissions = onRequestPermissions,
+                onOpenAppSettings = onOpenAppSettings
+            )
+        }
+
+        // 5) Danger zone
         item {
             ElevatedCard(
                 shape = RoundedCornerShape(20.dp),
@@ -1186,6 +1217,7 @@ fun SettingsScreen(
                 text = context.getString(R.string.version_display, versionDisplay),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 6.dp)
