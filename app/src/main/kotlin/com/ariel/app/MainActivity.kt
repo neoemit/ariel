@@ -135,7 +135,12 @@ fun PanicScreen(
     val isPresenceChecking by viewModel.isPresenceChecking.collectAsState()
     val onlineBuddies by viewModel.onlineBuddies.collectAsState()
     val incomingPanicSender by viewModel.incomingPanicSender.collectAsState()
-    val peerCount = onlineBuddies.size
+    val onlineBuddySnapshot = remember(onlineBuddies) {
+        onlineBuddies
+            .distinctBy { it.id.trim().lowercase() }
+            .sortedWith(compareBy<OnlineBuddy> { it.displayName.lowercase() }.thenBy { it.id.lowercase() })
+    }
+    val peerCount = onlineBuddySnapshot.size
     var showOnlineBuddiesDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -193,7 +198,7 @@ fun PanicScreen(
                 onDismissRequest = { showOnlineBuddiesDialog = false },
                 title = { Text(ctx.getString(R.string.online_buddies_title)) },
                 text = {
-                    if (onlineBuddies.isEmpty()) {
+                    if (onlineBuddySnapshot.isEmpty()) {
                         Text(
                             text = ctx.getString(R.string.online_buddies_empty),
                             style = MaterialTheme.typography.bodyMedium
@@ -203,7 +208,10 @@ fun PanicScreen(
                             modifier = Modifier.heightIn(max = 320.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            items(onlineBuddies) { buddy ->
+                            items(
+                                items = onlineBuddySnapshot,
+                                key = { buddy -> buddy.id.trim().lowercase() }
+                            ) { buddy ->
                                 Text(
                                     text = buddy.displayName,
                                     style = MaterialTheme.typography.bodyLarge

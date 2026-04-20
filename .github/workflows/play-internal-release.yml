@@ -16,7 +16,7 @@ on:
       - ".github/workflows/play-internal-release.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: play-internal-release
@@ -294,10 +294,52 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew :app:publishReleaseBundle --stacktrace --no-daemon
 
+      - name: Build signed release APK
+        env:
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --stacktrace --no-daemon
+
+      - name: Derive release metadata
+        id: release_meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_code="$(sed -nE 's/^[[:space:]]*val[[:space:]]+appVersionMinor[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' app/build.gradle.kts | head -n1)"
+          if [[ -z "$version_code" ]]; then
+            echo "Unable to resolve appVersionMinor from app/build.gradle.kts" >&2
+            exit 1
+          fi
+
+          version_name="1.${version_code}"
+          tag_name="v${version_name}"
+
+          echo "version_code=${version_code}" >> "$GITHUB_OUTPUT"
+          echo "version_name=${version_name}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${tag_name}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish signed APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_meta.outputs.tag_name }}
+          name: Ariel ${{ steps.release_meta.outputs.version_name }} (${{ steps.release_meta.outputs.version_code }})
+          files: app/build/outputs/apk/release/*.apk
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+
       - name: Upload built release bundle artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: app-release-bundle
           path: app/build/outputs/bundle/release/*.aab
+          if-no-files-found: warn
+
+      - name: Upload built release APK artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
