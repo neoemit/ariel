@@ -58,12 +58,35 @@ class SirenService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var onlineBuddyCount = 0
     private var peerCountReceiverRegistered = false
+    private var lastCombinedPresenceAtMs: Long = 0L
 
     private val peerCountReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            val peers = intent?.getStringArrayListExtra("PEER_IDS") ?: return
-            onlineBuddyCount = peers.size
-            updateMonitorNotification()
+            when (intent?.action) {
+                "com.thomaslamendola.ariel.PEER_COUNT_CHANGED" -> {
+                    val peers = intent.getStringArrayListExtra("PEER_IDS")
+                        ?.map { it.trim() }
+                        ?.filter { it.isNotBlank() }
+                        ?.toSet()
+                        ?: emptySet()
+
+                    val combinedIsFresh = System.currentTimeMillis() - lastCombinedPresenceAtMs <= COMBINED_PRESENCE_STALE_MS
+                    if (!combinedIsFresh) {
+                        onlineBuddyCount = peers.size
+                        updateMonitorNotification()
+                    }
+                }
+                ACTION_ONLINE_BUDDY_COUNT_CHANGED -> {
+                    val peers = intent.getStringArrayListExtra(EXTRA_ONLINE_BUDDY_IDS)
+                        ?.map { it.trim() }
+                        ?.filter { it.isNotBlank() }
+                        ?.toSet()
+                        ?: emptySet()
+                    lastCombinedPresenceAtMs = System.currentTimeMillis()
+                    onlineBuddyCount = peers.size
+                    updateMonitorNotification()
+                }
+            }
         }
     }
     private var vibrator: Vibrator? = null
@@ -107,7 +130,10 @@ class SirenService : Service() {
 
     private fun registerPeerCountReceiver() {
         if (peerCountReceiverRegistered) return
-        val filter = IntentFilter("com.thomaslamendola.ariel.PEER_COUNT_CHANGED")
+        val filter = IntentFilter().apply {
+            addAction("com.thomaslamendola.ariel.PEER_COUNT_CHANGED")
+            addAction(ACTION_ONLINE_BUDDY_COUNT_CHANGED)
+        }
         ContextCompat.registerReceiver(this, peerCountReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         peerCountReceiverRegistered = true
     }
@@ -724,6 +750,9 @@ class SirenService : Service() {
         const val ACTION_PANIC_ALERT_STATE = "com.thomaslamendola.ariel.PANIC_ALERT_STATE"
         const val EXTRA_ALERT_ACTIVE = "EXTRA_ALERT_ACTIVE"
         const val EXTRA_ALERT_SENDER_ID = "EXTRA_ALERT_SENDER_ID"
+        const val ACTION_ONLINE_BUDDY_COUNT_CHANGED = "com.thomaslamendola.ariel.ONLINE_BUDDY_COUNT_CHANGED"
+        const val EXTRA_ONLINE_BUDDY_IDS = "EXTRA_ONLINE_BUDDY_IDS"
+        private const val COMBINED_PRESENCE_STALE_MS = 90_000L
     }
 
     private fun isDiscreetModeEnabled(): Boolean {
