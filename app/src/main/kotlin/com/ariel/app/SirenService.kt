@@ -58,7 +58,10 @@ class SirenService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var onlineBuddyCount = 0
     private var peerCountReceiverRegistered = false
-    private var lastCombinedPresenceAtMs: Long = 0L
+    private var nearbyOnlineBuddyIds: Set<String> = emptySet()
+    private var relayOnlineBuddyIds: Set<String> = emptySet()
+    private var relayPresencePollingJob: Job? = null
+    private var relayPresenceRefreshInFlight = false
 
     private val peerCountReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -70,11 +73,8 @@ class SirenService : Service() {
                         ?.toSet()
                         ?: emptySet()
 
-                    val combinedIsFresh = System.currentTimeMillis() - lastCombinedPresenceAtMs <= COMBINED_PRESENCE_STALE_MS
-                    if (!combinedIsFresh) {
-                        onlineBuddyCount = peers.size
-                        updateMonitorNotification()
-                    }
+                    nearbyOnlineBuddyIds = peers
+                    updateMonitorBuddyCount()
                 }
                 ACTION_ONLINE_BUDDY_COUNT_CHANGED -> {
                     val peers = intent.getStringArrayListExtra(EXTRA_ONLINE_BUDDY_IDS)
@@ -82,9 +82,8 @@ class SirenService : Service() {
                         ?.filter { it.isNotBlank() }
                         ?.toSet()
                         ?: emptySet()
-                    lastCombinedPresenceAtMs = System.currentTimeMillis()
-                    onlineBuddyCount = peers.size
-                    updateMonitorNotification()
+                    relayOnlineBuddyIds = peers
+                    updateMonitorBuddyCount()
                 }
             }
         }
@@ -118,6 +117,7 @@ class SirenService : Service() {
             Log.d("ArielService", "Network available; forcing relay registration sync")
             startMonitoring()
             syncPushRegistration(force = true, reason = "network_available")
+            refreshRelayPresence(reason = "network_available")
             nearbyManager?.triggerPeerCountRefresh()
         }
     }
@@ -162,6 +162,7 @@ class SirenService : Service() {
                 startMonitoring()
                 nearbyManager?.enterUrgentMode(durationMs = 30_000L)
                 nearbyManager?.triggerPeerCountRefresh()
+                refreshRelayPresence(reason = "forced_reachability_refresh")
                 syncPushRegistration(force = false, reason = "forced_reachability_refresh")
             }
 
@@ -240,7 +241,12 @@ class SirenService : Service() {
         nearbyManager?.startPairing()
         MonitoringSafetyWorker.schedule(applicationContext)
 
+        nearbyOnlineBuddyIds = emptySet()
+        relayOnlineBuddyIds = emptySet()
+        onlineBuddyCount = 0
         showMonitorNotification()
+        updateMonitorBuddyCount()
+        startRelayPresencePolling()
         syncPushRegistration(force = true, reason = "start_monitoring")
         startRelayBootstrapRetries()
         startRelayHeartbeat()
@@ -261,6 +267,65 @@ class SirenService : Service() {
             ?.filter { it.isNotBlank() && !it.equals(myName, ignoreCase = true) }
             ?.toSet()
             ?: emptySet()
+    }
+
+    private fun updateMonitorBuddyCount() {
+        val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
+        val trustedFriends = getTrustedFriends(prefs)
+        onlineBuddyCount = mergedOnlineBuddyCount(
+            nearbyOnlineBuddyIds = nearbyOnlineBuddyIds,
+            relayOnlineBuddyIds = relayOnlineBuddyIds,
+            trustedBuddyIds = trustedFriends,
+        )
+        updateMonitorNotification()
+    }
+
+    private fun startRelayPresencePolling() {
+        if (relayPresencePollingJob?.isActive == true) return
+
+        relayPresencePollingJob = serviceScope.launch {
+            refreshRelayPresence(reason = "monitor_start")
+            while (isActive) {
+                delay(PanicViewModel.PRESENCE_POLL_INTERVAL_MS)
+                refreshRelayPresence(reason = "monitor_poll")
+            }
+        }
+    }
+
+    private fun refreshRelayPresence(reason: String) {
+        if (relayPresenceRefreshInFlight) return
+        relayPresenceRefreshInFlight = true
+
+        serviceScope.launch {
+            try {
+                val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
+                val friends = getTrustedFriends(prefs)
+                if (friends.isEmpty() || RelayBackendClient.getBackendUrl(this@SirenService).isNullOrBlank()) {
+                    relayOnlineBuddyIds = emptySet()
+                    updateMonitorBuddyCount()
+                    return@launch
+                }
+
+                runCatching {
+                    RelayBackendClient.fetchPresence(
+                        context = this@SirenService,
+                        buddyIds = friends,
+                        staleAfterSeconds = PanicViewModel.PRESENCE_STALE_AFTER_SECONDS,
+                    )
+                }.onSuccess { onlineIds ->
+                    relayOnlineBuddyIds = onlineIds
+                        .asSequence()
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .toSet()
+                    updateMonitorBuddyCount()
+                }.onFailure { error ->
+                    Log.w("ArielService", "Monitor relay presence refresh failed ($reason): ${error.message}")
+                }
+            } finally {
+                relayPresenceRefreshInFlight = false
+            }
+        }
     }
 
     private fun syncPushRegistration(force: Boolean, reason: String) {
@@ -752,7 +817,6 @@ class SirenService : Service() {
         const val EXTRA_ALERT_SENDER_ID = "EXTRA_ALERT_SENDER_ID"
         const val ACTION_ONLINE_BUDDY_COUNT_CHANGED = "com.thomaslamendola.ariel.ONLINE_BUDDY_COUNT_CHANGED"
         const val EXTRA_ONLINE_BUDDY_IDS = "EXTRA_ONLINE_BUDDY_IDS"
-        private const val COMBINED_PRESENCE_STALE_MS = 90_000L
     }
 
     private fun isDiscreetModeEnabled(): Boolean {
@@ -784,6 +848,8 @@ class SirenService : Service() {
         relayHeartbeatJob = null
         relayBootstrapRetryJob?.cancel()
         relayBootstrapRetryJob = null
+        relayPresencePollingJob?.cancel()
+        relayPresencePollingJob = null
         tokenRefreshRetryJob?.cancel()
         tokenRefreshRetryJob = null
         serviceScope.cancel()
