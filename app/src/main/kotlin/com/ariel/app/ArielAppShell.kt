@@ -1,7 +1,6 @@
 package com.thomaslamendola.ariel
 
 import android.Manifest
-import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -374,53 +373,6 @@ fun PermissionStatusCard(
                             MaterialTheme.colorScheme.error
                         }
                     )
-                }
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val notificationManager =
-                    context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                val canUseFullScreenIntent = notificationManager.canUseFullScreenIntent()
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = context.getString(R.string.permission_group_full_screen_intent),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        text = if (canUseFullScreenIntent) {
-                            context.getString(R.string.permissions_status_granted)
-                        } else {
-                            context.getString(R.string.permissions_status_not_granted)
-                        },
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (canUseFullScreenIntent) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.error
-                        }
-                    )
-                }
-                if (!canUseFullScreenIntent) {
-                    Text(
-                        text = context.getString(R.string.permission_full_screen_intent_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedButton(
-                        onClick = {
-                            val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
-                                data = Uri.fromParts("package", context.packageName, null)
-                            }
-                            context.startActivity(intent)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(context.getString(R.string.permission_full_screen_intent_action))
-                    }
                 }
             }
 
