@@ -95,6 +95,9 @@
     <string name="permission_group_nearby_wifi">Nearby Wi-Fi</string>
     <string name="permission_group_camera">Camera</string>
     <string name="permission_group_notifications">Notifications</string>
+    <string name="permission_group_full_screen_intent">Full-screen alerts</string>
+    <string name="permission_full_screen_intent_desc">Required on Android 14+ so alerts appear on the lock screen when the phone rings.</string>
+    <string name="permission_full_screen_intent_action">Enable in System Settings</string>
     <string name="settings_reset_confirm_title">Reset all buddy links?</string>
     <string name="settings_reset_confirm_body">This removes all paired buddies and nicknames from this device. You can pair again anytime.</string>
     <string name="settings_reset_confirm_action">Reset links</string>
