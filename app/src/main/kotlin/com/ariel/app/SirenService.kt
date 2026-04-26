@@ -756,7 +756,25 @@ class SirenService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(this, panicChannelId)
+        val fullScreenIntent = Intent(this, IncomingAlertActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(IncomingAlertActivity.EXTRA_DISPLAY_NAME, displayName)
+            putExtra(IncomingAlertActivity.EXTRA_ESCALATION_TYPE, normalizedEscalation)
+        }
+        val fullScreenPendingIntent = PendingIntent.getActivity(
+            this,
+            1,
+            fullScreenIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val canUseFullScreenIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            notificationManager.canUseFullScreenIntent()
+        } else {
+            true
+        }
+
+        val notificationBuilder = NotificationCompat.Builder(this, panicChannelId)
             .setContentTitle("ARIEL PANIC ALERT $emoji")
             .setContentText(reasonText)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
@@ -767,8 +785,12 @@ class SirenService : Service() {
             .setContentIntent(stopPendingIntent)
             .setDeleteIntent(stopPendingIntent)
             .addAction(android.R.drawable.ic_delete, "I am coming!", stopPendingIntent)
-            .build()
-            .apply {
+
+        if (canUseFullScreenIntent) {
+            notificationBuilder.setFullScreenIntent(fullScreenPendingIntent, true)
+        }
+
+        val notification = notificationBuilder.build().apply {
                 flags = flags or Notification.FLAG_NO_CLEAR
             }
 
