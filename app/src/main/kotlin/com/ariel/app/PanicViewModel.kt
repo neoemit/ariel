@@ -164,6 +164,10 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             filter,
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
+
+        context.startService(Intent(context, SirenService::class.java).apply {
+            action = "QUERY_STATE"
+        })
     }
 
     fun startPairing() {

@@ -212,6 +212,13 @@ class SirenService : Service() {
                 val eventId = intent.getStringExtra("EVENT_ID")
                 handleIncomingAcknowledge(acknowledger, eventId)
             }
+
+            "QUERY_STATE" -> {
+                broadcastPanicAlertState(
+                    active = currentPanicSender != null,
+                    senderId = currentPanicSender
+                )
+            }
         }
 
         return START_STICKY
