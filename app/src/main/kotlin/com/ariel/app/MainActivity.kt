@@ -52,6 +52,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
@@ -148,8 +154,20 @@ fun PanicScreen(
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
     ) {
+        incomingPanicSender?.let { sender ->
+            IncomingPanicBanner(
+                sender = sender,
+                onAcknowledge = { viewModel.acknowledgeIncomingAlert() }
+            )
+            Spacer(Modifier.height(12.dp))
+        }
+
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
         // Status Bar at the top
         Surface(
             shape = CircleShape,
@@ -230,43 +248,6 @@ fun PanicScreen(
             )
         }
 
-        incomingPanicSender?.let { sender ->
-            ElevatedCard(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.75f)
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = ctx.getString(R.string.incoming_alert_active_title),
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = ctx.getString(R.string.incoming_alert_active_body, sender),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    Button(
-                        onClick = { viewModel.acknowledgeIncomingAlert() },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(ctx.getString(R.string.incoming_alert_ack_action))
-                    }
-                }
-            }
-        }
-
         if (isTriggered) {
             // Pulsing Animation or Static Alert
             Text(LocalContext.current.getString(R.string.alert_active), fontSize = 32.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
@@ -331,6 +312,64 @@ fun PanicScreen(
                     onPressedChange = { pressed ->
                         isPressed = pressed
                     }
+                )
+            }
+        }
+        } // inner centered column
+    }
+}
+
+@Composable
+private fun IncomingPanicBanner(sender: String, onAcknowledge: () -> Unit) {
+    val ctx = LocalContext.current
+    val infiniteTransition = rememberInfiniteTransition(label = "panic_pulse")
+    val borderAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
+        label = "border_alpha"
+    )
+    val errorColor = MaterialTheme.colorScheme.error
+
+    ElevatedCard(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(2.dp, errorColor.copy(alpha = borderAlpha), RoundedCornerShape(16.dp))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "🚨",
+                fontSize = 36.sp
+            )
+            Text(
+                text = ctx.getString(R.string.incoming_alert_active_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = ctx.getString(R.string.incoming_alert_active_body, sender),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Button(
+                onClick = onAcknowledge,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text(
+                    text = ctx.getString(R.string.incoming_alert_ack_action),
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
