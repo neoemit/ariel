@@ -48,7 +48,7 @@ class SirenService : Service() {
     private val discreetVibrationPattern = longArrayOf(0L, 450L, 300L)
     private val notificationId = 1001
     private val monitorNotificationId = 1002
-    private val relayHeartbeatIntervalMs = 55_000L
+    private val relayHeartbeatIntervalMs = MonitoringPreferences.RELAY_HEARTBEAT_INTERVAL_MS
     private val relayRegistrationMinIntervalMs = 45_000L
     private val connectivityRegistrationMinIntervalMs = 10_000L
     private val relayBootstrapDelaysMs = listOf(15_000L, 30_000L)
@@ -185,18 +185,23 @@ class SirenService : Service() {
                 friendName?.let {
                     Log.d("ArielService", "ADD_FRIEND: $it")
                     nearbyManager?.addFriend(it)
+                    startMonitoring()
                 }
             }
 
             "REMOVE_FRIEND" -> {
                 startMonitoring()
                 val friendName = intent.getStringExtra("FRIEND_NAME")
-                friendName?.let { nearbyManager?.removeFriend(it) }
+                friendName?.let {
+                    nearbyManager?.removeFriend(it)
+                    startMonitoring()
+                }
             }
 
             "CLEAR_POOL" -> {
                 startMonitoring()
                 nearbyManager?.clearFriends()
+                startMonitoring()
             }
 
             "REMOTE_PANIC_PUSH" -> {
@@ -245,6 +250,27 @@ class SirenService : Service() {
             }
         }
         nearbyManager?.replaceTrustedState(savedFriends)
+        val backgroundMonitoringEnabled = MonitoringPreferences.isBackgroundMonitoringEnabled(prefs)
+        val shouldRunBackgroundMonitoring = MonitoringPreferences.shouldRunBackgroundMonitoring(
+            backgroundMonitoringEnabled = backgroundMonitoringEnabled,
+            trustedFriendCount = savedFriends.size,
+        )
+
+        if (!shouldRunBackgroundMonitoring) {
+            Log.d(
+                "ArielService",
+                "Background monitoring idle: enabled=$backgroundMonitoringEnabled friends=${savedFriends.size}"
+            )
+            nearbyManager?.stopPairing()
+            stopBackgroundMonitoringJobs()
+            MonitoringSafetyWorker.cancel(applicationContext)
+            nearbyOnlineBuddyIds = emptySet()
+            relayOnlineBuddyIds = emptySet()
+            onlineBuddyCount = 0
+            hideMonitorNotification()
+            return
+        }
+
         nearbyManager?.startPairing()
         MonitoringSafetyWorker.schedule(applicationContext)
 
@@ -293,10 +319,19 @@ class SirenService : Service() {
         relayPresencePollingJob = serviceScope.launch {
             refreshRelayPresence(reason = "monitor_start")
             while (isActive) {
-                delay(PanicViewModel.PRESENCE_POLL_INTERVAL_MS)
+                delay(MonitoringPreferences.BACKGROUND_PRESENCE_POLL_INTERVAL_MS)
                 refreshRelayPresence(reason = "monitor_poll")
             }
         }
+    }
+
+    private fun stopBackgroundMonitoringJobs() {
+        relayPresencePollingJob?.cancel()
+        relayPresencePollingJob = null
+        relayHeartbeatJob?.cancel()
+        relayHeartbeatJob = null
+        relayBootstrapRetryJob?.cancel()
+        relayBootstrapRetryJob = null
     }
 
     private fun refreshRelayPresence(reason: String) {
@@ -313,6 +348,7 @@ class SirenService : Service() {
                     return@launch
                 }
 
+                Log.d("ArielDiagnostics", "relay_presence_request reason=$reason")
                 runCatching {
                     RelayBackendClient.fetchPresence(
                         context = this@SirenService,
@@ -375,6 +411,7 @@ class SirenService : Service() {
         if (relayRegistrationInFlight) return false
         relayRegistrationInFlight = true
 
+        Log.d("ArielDiagnostics", "relay_registration_request reason=$reason force=$force")
         return runCatching {
             RelayBackendClient.registerDevice(
                 context = this@SirenService,
@@ -602,6 +639,19 @@ class SirenService : Service() {
     private fun updateMonitorNotification() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(monitorNotificationId, buildMonitorNotification())
+    }
+
+    private fun hideMonitorNotification() {
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+        }
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(monitorNotificationId)
     }
 
     private fun startSiren(discreetModeEnabled: Boolean) {

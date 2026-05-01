@@ -30,6 +30,21 @@ class BootReceiver : BroadcastReceiver() {
             }
         }
 
+        val prefs = context.getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
+        val trustedFriendCount = prefs.getStringSet("friends", emptySet())
+            ?.map { it.trim() }
+            ?.count { it.isNotBlank() }
+            ?: 0
+        if (!MonitoringPreferences.shouldRunBackgroundMonitoring(
+                backgroundMonitoringEnabled = MonitoringPreferences.isBackgroundMonitoringEnabled(prefs),
+                trustedFriendCount = trustedFriendCount,
+            )
+        ) {
+            Log.d("BootReceiver", "Skipping monitor startup from $action; monitoring disabled or no friends")
+            MonitoringSafetyWorker.cancel(context)
+            return
+        }
+
         Log.d("BootReceiver", "Starting SirenService from broadcast action=$action")
         val serviceIntent = Intent(context, SirenService::class.java).apply {
             this.action = "START_MONITORING"

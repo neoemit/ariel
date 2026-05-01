@@ -125,6 +125,10 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         prefs.getBoolean(PREF_DISCREET_MODE_ENABLED, false)
     )
     val discreetModeEnabled = _discreetModeEnabled.asStateFlow()
+    private val _backgroundMonitoringEnabled = MutableStateFlow(
+        MonitoringPreferences.isBackgroundMonitoringEnabled(prefs)
+    )
+    val backgroundMonitoringEnabled = _backgroundMonitoringEnabled.asStateFlow()
 
     private val _nicknames = MutableStateFlow<Map<String, String>>(emptyMap())
     val nicknames = _nicknames.asStateFlow()
@@ -310,6 +314,34 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     fun setDiscreetModeEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(PREF_DISCREET_MODE_ENABLED, enabled).apply()
         _discreetModeEnabled.value = enabled
+    }
+
+    fun setBackgroundMonitoringEnabled(enabled: Boolean) {
+        prefs.edit()
+            .putBoolean(MonitoringPreferences.PREF_BACKGROUND_MONITORING_ENABLED, enabled)
+            .apply()
+        _backgroundMonitoringEnabled.value = enabled
+        if (enabled) {
+            context.startService(Intent(context, SirenService::class.java).apply {
+                action = "START_MONITORING"
+            })
+        } else {
+            MonitoringSafetyWorker.cancel(context)
+            context.startService(Intent(context, SirenService::class.java).apply {
+                action = "START_MONITORING"
+            })
+        }
+    }
+
+    fun requestBatteryOptimizationExemption() {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        if (!powerManager.isIgnoringBatteryOptimizations(context.packageName)) {
+            val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = android.net.Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        }
     }
 
     fun setUiActive(active: Boolean) {
