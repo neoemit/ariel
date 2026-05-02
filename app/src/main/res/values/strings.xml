@@ -4,10 +4,7 @@
     <string name="nav_pairing">Pairing</string>
     <string name="nav_settings">Settings</string>
 
-    <plurals name="notification_monitor_buddy_count">
-        <item quantity="one">Listening for signals from 1 buddy</item>
-        <item quantity="other">Listening for signals from %d buddies</item>
-    </plurals>
+    <string name="notification_monitor_text">Listening for signals from paired buddies</string>
 
     <string name="status_none_online">No Buddies Online</string>
     <string name="status_checking_online">Checking Buddy Availability…</string>

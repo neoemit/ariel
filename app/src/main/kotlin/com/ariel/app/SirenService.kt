@@ -5,10 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.media.AudioAttributes
 import android.media.AudioManager
 import android.media.MediaPlayer
@@ -24,7 +22,6 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,36 +52,6 @@ class SirenService : Service() {
 
     private var nearbyManager: NearbyManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
-    private var onlineBuddyCount = 0
-    private var peerCountReceiverRegistered = false
-    private var nearbyOnlineBuddyIds: Set<String> = emptySet()
-    private var relayOnlineBuddyIds: Set<String> = emptySet()
-
-    private val peerCountReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            when (intent?.action) {
-                "com.thomaslamendola.ariel.PEER_COUNT_CHANGED" -> {
-                    val peers = intent.getStringArrayListExtra("PEER_IDS")
-                        ?.map { it.trim() }
-                        ?.filter { it.isNotBlank() }
-                        ?.toSet()
-                        ?: emptySet()
-
-                    nearbyOnlineBuddyIds = peers
-                    updateMonitorBuddyCount()
-                }
-                ACTION_ONLINE_BUDDY_COUNT_CHANGED -> {
-                    val peers = intent.getStringArrayListExtra(EXTRA_ONLINE_BUDDY_IDS)
-                        ?.map { it.trim() }
-                        ?.filter { it.isNotBlank() }
-                        ?.toSet()
-                        ?: emptySet()
-                    relayOnlineBuddyIds = peers
-                    updateMonitorBuddyCount()
-                }
-            }
-        }
-    }
     private var vibrator: Vibrator? = null
     private var currentPanicSender: String? = null
     private var currentPanicEventId: String? = null
@@ -120,23 +87,6 @@ class SirenService : Service() {
     override fun onCreate() {
         super.onCreate()
         registerNetworkCallback()
-        registerPeerCountReceiver()
-    }
-
-    private fun registerPeerCountReceiver() {
-        if (peerCountReceiverRegistered) return
-        val filter = IntentFilter().apply {
-            addAction("com.thomaslamendola.ariel.PEER_COUNT_CHANGED")
-            addAction(ACTION_ONLINE_BUDDY_COUNT_CHANGED)
-        }
-        ContextCompat.registerReceiver(this, peerCountReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
-        peerCountReceiverRegistered = true
-    }
-
-    private fun unregisterPeerCountReceiver() {
-        if (!peerCountReceiverRegistered) return
-        runCatching { unregisterReceiver(peerCountReceiver) }
-        peerCountReceiverRegistered = false
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -251,9 +201,6 @@ class SirenService : Service() {
             stopBackgroundMonitoringJobs()
             MonitoringSafetyWorker.cancel(applicationContext)
             DailyRegistrationWorker.cancel(applicationContext)
-            nearbyOnlineBuddyIds = emptySet()
-            relayOnlineBuddyIds = emptySet()
-            onlineBuddyCount = 0
             hideMonitorNotification()
             return
         }
@@ -262,11 +209,7 @@ class SirenService : Service() {
         MonitoringSafetyWorker.schedule(applicationContext)
         DailyRegistrationWorker.schedule(applicationContext)
 
-        nearbyOnlineBuddyIds = emptySet()
-        relayOnlineBuddyIds = emptySet()
-        onlineBuddyCount = 0
         showMonitorNotification()
-        updateMonitorBuddyCount()
         syncPushRegistration(force = true, reason = "start_monitoring")
         startRelayBootstrapRetries()
     }
@@ -286,17 +229,6 @@ class SirenService : Service() {
             ?.filter { it.isNotBlank() && !it.equals(myName, ignoreCase = true) }
             ?.toSet()
             ?: emptySet()
-    }
-
-    private fun updateMonitorBuddyCount() {
-        val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
-        val trustedFriends = getTrustedFriends(prefs)
-        onlineBuddyCount = mergedOnlineBuddyCount(
-            nearbyOnlineBuddyIds = nearbyOnlineBuddyIds,
-            relayOnlineBuddyIds = relayOnlineBuddyIds,
-            trustedBuddyIds = trustedFriends,
-        )
-        updateMonitorNotification()
     }
 
     private fun stopBackgroundMonitoringJobs() {
@@ -531,14 +463,9 @@ class SirenService : Service() {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val contentText = resources.getQuantityString(
-            R.plurals.notification_monitor_buddy_count,
-            onlineBuddyCount,
-            onlineBuddyCount
-        )
         return NotificationCompat.Builder(this, monitorChannelId)
             .setContentTitle("Ariel is active")
-            .setContentText(contentText)
+            .setContentText(getString(R.string.notification_monitor_text))
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
@@ -549,11 +476,6 @@ class SirenService : Service() {
     private fun showMonitorNotification() {
         ensureMonitorChannelCreated()
         startForeground(monitorNotificationId, buildMonitorNotification())
-    }
-
-    private fun updateMonitorNotification() {
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(monitorNotificationId, buildMonitorNotification())
     }
 
     private fun hideMonitorNotification() {
@@ -809,8 +731,6 @@ class SirenService : Service() {
         const val ACTION_PANIC_ALERT_STATE = "com.thomaslamendola.ariel.PANIC_ALERT_STATE"
         const val EXTRA_ALERT_ACTIVE = "EXTRA_ALERT_ACTIVE"
         const val EXTRA_ALERT_SENDER_ID = "EXTRA_ALERT_SENDER_ID"
-        const val ACTION_ONLINE_BUDDY_COUNT_CHANGED = "com.thomaslamendola.ariel.ONLINE_BUDDY_COUNT_CHANGED"
-        const val EXTRA_ONLINE_BUDDY_IDS = "EXTRA_ONLINE_BUDDY_IDS"
     }
 
     private fun isDiscreetModeEnabled(): Boolean {
@@ -830,7 +750,6 @@ class SirenService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         unregisterNetworkCallback()
-        unregisterPeerCountReceiver()
         nearbyManager?.stopPairing()
         stopDiscreetVibration()
         broadcastPanicAlertState(active = false, senderId = null)
