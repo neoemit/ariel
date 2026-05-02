@@ -48,7 +48,6 @@ class SirenService : Service() {
     private val discreetVibrationPattern = longArrayOf(0L, 450L, 300L)
     private val notificationId = 1001
     private val monitorNotificationId = 1002
-    private val relayHeartbeatIntervalMs = MonitoringPreferences.RELAY_HEARTBEAT_INTERVAL_MS
     private val relayRegistrationMinIntervalMs = 45_000L
     private val connectivityRegistrationMinIntervalMs = 10_000L
     private val relayBootstrapDelaysMs = listOf(15_000L, 30_000L)
@@ -60,8 +59,6 @@ class SirenService : Service() {
     private var peerCountReceiverRegistered = false
     private var nearbyOnlineBuddyIds: Set<String> = emptySet()
     private var relayOnlineBuddyIds: Set<String> = emptySet()
-    private var relayPresencePollingJob: Job? = null
-    private var relayPresenceRefreshInFlight = false
 
     private val peerCountReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -94,7 +91,6 @@ class SirenService : Service() {
     private val handledEventIds = LinkedHashSet<String>()
     private val handledAckIds = LinkedHashSet<String>()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var relayHeartbeatJob: Job? = null
     private var relayBootstrapRetryJob: Job? = null
     private var tokenRefreshRetryJob: Job? = null
     private var cachedFcmToken: String? = null
@@ -117,7 +113,6 @@ class SirenService : Service() {
             Log.d("ArielService", "Network available; forcing relay registration sync")
             startMonitoring()
             syncPushRegistration(force = true, reason = "network_available")
-            refreshRelayPresence(reason = "network_available")
             nearbyManager?.triggerPeerCountRefresh()
         }
     }
@@ -162,7 +157,6 @@ class SirenService : Service() {
                 startMonitoring()
                 nearbyManager?.enterUrgentMode(durationMs = 30_000L)
                 nearbyManager?.triggerPeerCountRefresh()
-                refreshRelayPresence(reason = "forced_reachability_refresh")
                 syncPushRegistration(force = false, reason = "forced_reachability_refresh")
             }
 
@@ -273,16 +267,15 @@ class SirenService : Service() {
 
         nearbyManager?.startPairing()
         MonitoringSafetyWorker.schedule(applicationContext)
+        DailyRegistrationWorker.schedule(applicationContext)
 
         nearbyOnlineBuddyIds = emptySet()
         relayOnlineBuddyIds = emptySet()
         onlineBuddyCount = 0
         showMonitorNotification()
         updateMonitorBuddyCount()
-        startRelayPresencePolling()
         syncPushRegistration(force = true, reason = "start_monitoring")
         startRelayBootstrapRetries()
-        startRelayHeartbeat()
     }
 
     private fun getOrCreateMyName(prefs: android.content.SharedPreferences): String {
@@ -313,62 +306,9 @@ class SirenService : Service() {
         updateMonitorNotification()
     }
 
-    private fun startRelayPresencePolling() {
-        if (relayPresencePollingJob?.isActive == true) return
-
-        relayPresencePollingJob = serviceScope.launch {
-            refreshRelayPresence(reason = "monitor_start")
-            while (isActive) {
-                delay(MonitoringPreferences.BACKGROUND_PRESENCE_POLL_INTERVAL_MS)
-                refreshRelayPresence(reason = "monitor_poll")
-            }
-        }
-    }
-
     private fun stopBackgroundMonitoringJobs() {
-        relayPresencePollingJob?.cancel()
-        relayPresencePollingJob = null
-        relayHeartbeatJob?.cancel()
-        relayHeartbeatJob = null
         relayBootstrapRetryJob?.cancel()
         relayBootstrapRetryJob = null
-    }
-
-    private fun refreshRelayPresence(reason: String) {
-        if (relayPresenceRefreshInFlight) return
-        relayPresenceRefreshInFlight = true
-
-        serviceScope.launch {
-            try {
-                val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
-                val friends = getTrustedFriends(prefs)
-                if (friends.isEmpty() || RelayBackendClient.getBackendUrl(this@SirenService).isNullOrBlank()) {
-                    relayOnlineBuddyIds = emptySet()
-                    updateMonitorBuddyCount()
-                    return@launch
-                }
-
-                Log.d("ArielDiagnostics", "relay_presence_request reason=$reason")
-                runCatching {
-                    RelayBackendClient.fetchPresence(
-                        context = this@SirenService,
-                        buddyIds = friends,
-                        staleAfterSeconds = PanicViewModel.PRESENCE_STALE_AFTER_SECONDS,
-                    )
-                }.onSuccess { onlineIds ->
-                    relayOnlineBuddyIds = onlineIds
-                        .asSequence()
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                        .toSet()
-                    updateMonitorBuddyCount()
-                }.onFailure { error ->
-                    Log.w("ArielService", "Monitor relay presence refresh failed ($reason): ${error.message}")
-                }
-            } finally {
-                relayPresenceRefreshInFlight = false
-            }
-        }
     }
 
     private fun syncPushRegistration(force: Boolean, reason: String) {
@@ -485,24 +425,6 @@ class SirenService : Service() {
                 if (success) break
             }
             relayBootstrapRetryJob = null
-        }
-    }
-
-    private fun shouldHeartbeatRelay(): Boolean {
-        val prefs = getSharedPreferences("ariel_prefs", Context.MODE_PRIVATE)
-        val backendConfigured = !RelayBackendClient.getBackendUrl(this).isNullOrBlank()
-        return backendConfigured && getTrustedFriends(prefs).isNotEmpty()
-    }
-
-    private fun startRelayHeartbeat() {
-        if (relayHeartbeatJob?.isActive == true) return
-        relayHeartbeatJob = serviceScope.launch {
-            while (isActive) {
-                delay(relayHeartbeatIntervalMs)
-                if (shouldHeartbeatRelay()) {
-                    performPushRegistration(force = false, reason = "heartbeat")
-                }
-            }
         }
     }
 
@@ -923,12 +845,8 @@ class SirenService : Service() {
             if (it.isHeld) it.release()
         }
         wakeLock = null
-        relayHeartbeatJob?.cancel()
-        relayHeartbeatJob = null
         relayBootstrapRetryJob?.cancel()
         relayBootstrapRetryJob = null
-        relayPresencePollingJob?.cancel()
-        relayPresencePollingJob = null
         tokenRefreshRetryJob?.cancel()
         tokenRefreshRetryJob = null
         serviceScope.cancel()

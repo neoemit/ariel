@@ -587,7 +587,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         const val PREF_DISCREET_MODE_ENABLED = "discreet_mode_enabled"
         const val PANIC_HOLD_DURATION_MS = 1_500L
-        const val PRESENCE_POLL_INTERVAL_MS = 25_000L
+        const val PRESENCE_POLL_INTERVAL_MS = 60_000L
         const val PRESENCE_STALE_AFTER_SECONDS = 180
         const val OFFLINE_GRACE_WINDOW_MS = 120_000L
         const val PRESENCE_ZERO_CONFIRM_DELAY_MS = 2_500L

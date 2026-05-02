@@ -65,7 +65,7 @@ class MonitoringSafetyWorker(
                 return
             }
 
-            val request = PeriodicWorkRequestBuilder<MonitoringSafetyWorker>(30, TimeUnit.MINUTES)
+            val request = PeriodicWorkRequestBuilder<MonitoringSafetyWorker>(60, TimeUnit.MINUTES)
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiresBatteryNotLow(true)

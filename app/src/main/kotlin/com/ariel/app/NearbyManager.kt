@@ -53,6 +53,7 @@ class NearbyManager(private val context: Context, val myName: String) {
     private var isAdvertisingStartInFlight = false
     private var isDiscoveryStartInFlight = false
     private var reconnectAttempt = 0
+    private var isInUrgentMode = false
 
     private val payloadCallback = object : PayloadCallback() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
@@ -203,6 +204,7 @@ class NearbyManager(private val context: Context, val myName: String) {
 
     fun stopPairing() {
         isRunning = false
+        isInUrgentMode = false
         cancelReconnect()
         urgentTimeout?.let { mainHandler.removeCallbacks(it) }
         urgentTimeout = null
@@ -219,6 +221,7 @@ class NearbyManager(private val context: Context, val myName: String) {
 
         if (trustedFriends.isEmpty()) {
             Log.d(tag, "refreshConnectivityState($reason): no trusted friends, stopping radios")
+            isInUrgentMode = false
             cancelReconnect()
             stopNearbyRadios()
             pendingConnectionEndpointIds.clear()
@@ -227,14 +230,9 @@ class NearbyManager(private val context: Context, val myName: String) {
             return
         }
 
-        Log.d(tag, "refreshConnectivityState($reason): ensuring continuous nearby connectivity")
+        Log.d(tag, "refreshConnectivityState($reason): starting low-power advertising")
         startAdvertising()
-        startDiscovery()
-        if (_peers.value.isEmpty()) {
-            scheduleReconnect("refresh_$reason")
-        } else {
-            cancelReconnect()
-        }
+        // Discovery is on-demand only; started by enterUrgentMode() when panic is triggered
     }
 
     private fun restartAdvertisingAndDiscovery(reason: String) {
@@ -243,12 +241,24 @@ class NearbyManager(private val context: Context, val myName: String) {
         Log.d(tag, "Restarting advertising/discovery ($reason)")
         stopNearbyRadios()
         startAdvertising()
-        startDiscovery()
+        if (isInUrgentMode) {
+            startDiscovery()
+        }
         notifyPeerCount()
     }
 
     private fun scheduleReconnect(reason: String) {
         if (!isRunning || trustedFriends.isEmpty()) return
+
+        if (!isInUrgentMode) {
+            // Low-power mode: only ensure advertising is alive, no reconnect loop
+            if (!isAdvertising && !isAdvertisingStartInFlight) {
+                startAdvertising()
+            }
+            return
+        }
+
+        // Urgent mode: full reconnect loop to find and connect to all buddies
         if (_peers.value.isNotEmpty()) {
             cancelReconnect()
             return
@@ -259,7 +269,7 @@ class NearbyManager(private val context: Context, val myName: String) {
         Log.d(tag, "Scheduling reconnect in ${delayMs}ms ($reason)")
         reconnectRunnable = Runnable {
             reconnectRunnable = null
-            if (!isRunning || trustedFriends.isEmpty()) return@Runnable
+            if (!isRunning || trustedFriends.isEmpty() || !isInUrgentMode) return@Runnable
             if (_peers.value.isNotEmpty()) {
                 cancelReconnect()
                 return@Runnable
@@ -267,11 +277,10 @@ class NearbyManager(private val context: Context, val myName: String) {
 
             val radiosActive = isAdvertising && isDiscovering
             val radiosStarting = isAdvertisingStartInFlight || isDiscoveryStartInFlight
+            reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(10)
             if (radiosActive || radiosStarting) {
-                reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(10)
                 Log.d(tag, "Reconnect health check ($reason): radios active=$radiosActive starting=$radiosStarting")
             } else {
-                reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(10)
                 Log.d(tag, "Reconnect tick ($reason): restarting radios")
                 restartAdvertisingAndDiscovery("reconnect_$reason")
             }
@@ -281,6 +290,7 @@ class NearbyManager(private val context: Context, val myName: String) {
     }
 
     private fun nextReconnectDelayMs(): Long {
+        // In urgent mode both radios should be active; use health-check delay if they are
         val radiosActive = (isAdvertising || isAdvertisingStartInFlight) &&
             (isDiscovering || isDiscoveryStartInFlight)
         if (radiosActive) return reconnectHealthCheckDelayMs
@@ -302,17 +312,32 @@ class NearbyManager(private val context: Context, val myName: String) {
         if (!isRunning || trustedFriends.isEmpty()) return
 
         Log.d(tag, "Entering urgent mode for ${durationMs}ms")
-        restartAdvertisingAndDiscovery("urgent_start")
+        isInUrgentMode = true
+        // Restart both radios for a clean slate; discovery will find buddies actively
+        stopNearbyRadios()
+        startAdvertising()
+        startDiscovery()
         scheduleReconnect("urgent_start")
 
         urgentTimeout?.let { mainHandler.removeCallbacks(it) }
         urgentTimeout = Runnable {
-            if (!isRunning || trustedFriends.isEmpty()) return@Runnable
-            Log.d(tag, "Urgent mode reinforcement tick")
-            restartAdvertisingAndDiscovery("urgent_reinforce")
-            scheduleReconnect("urgent_reinforce")
+            Log.d(tag, "Urgent mode expired, reverting to advertise-only")
+            isInUrgentMode = false
+            stopDiscoveryOnly()
+            cancelReconnect()
+            urgentTimeout = null
         }
         mainHandler.postDelayed(urgentTimeout!!, durationMs.coerceAtLeast(5_000L))
+    }
+
+    private fun stopDiscoveryOnly() {
+        if (isDiscovering) {
+            connectionsClient.stopDiscovery()
+        } else {
+            runCatching { connectionsClient.stopDiscovery() }
+        }
+        isDiscovering = false
+        isDiscoveryStartInFlight = false
     }
 
     private fun startAdvertising() {
