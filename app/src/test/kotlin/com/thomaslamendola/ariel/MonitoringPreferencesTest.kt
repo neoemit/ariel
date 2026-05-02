@@ -6,24 +6,8 @@ import org.junit.Test
 
 class MonitoringPreferencesTest {
     @Test
-    fun `background monitoring only runs when enabled and friends exist`() {
-        assertTrue(
-            MonitoringPreferences.shouldRunBackgroundMonitoring(
-                backgroundMonitoringEnabled = true,
-                trustedFriendCount = 1,
-            )
-        )
-        assertFalse(
-            MonitoringPreferences.shouldRunBackgroundMonitoring(
-                backgroundMonitoringEnabled = true,
-                trustedFriendCount = 0,
-            )
-        )
-        assertFalse(
-            MonitoringPreferences.shouldRunBackgroundMonitoring(
-                backgroundMonitoringEnabled = false,
-                trustedFriendCount = 3,
-            )
-        )
+    fun `background monitoring only runs when friends exist`() {
+        assertTrue(MonitoringPreferences.shouldRunBackgroundMonitoring(trustedFriendCount = 1))
+        assertFalse(MonitoringPreferences.shouldRunBackgroundMonitoring(trustedFriendCount = 0))
     }
 }

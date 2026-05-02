@@ -39,6 +39,10 @@ class DailyRegistrationWorker(
     companion object {
         private const val UNIQUE_WORK_NAME = "ariel_daily_registration"
 
+        fun cancel(context: Context) {
+            WorkManager.getInstance(context).cancelUniqueWork(UNIQUE_WORK_NAME)
+        }
+
         fun schedule(context: Context) {
             val request = PeriodicWorkRequestBuilder<DailyRegistrationWorker>(24, TimeUnit.HOURS)
                 .setConstraints(

@@ -244,20 +244,13 @@ class SirenService : Service() {
             }
         }
         nearbyManager?.replaceTrustedState(savedFriends)
-        val backgroundMonitoringEnabled = MonitoringPreferences.isBackgroundMonitoringEnabled(prefs)
-        val shouldRunBackgroundMonitoring = MonitoringPreferences.shouldRunBackgroundMonitoring(
-            backgroundMonitoringEnabled = backgroundMonitoringEnabled,
-            trustedFriendCount = savedFriends.size,
-        )
 
-        if (!shouldRunBackgroundMonitoring) {
-            Log.d(
-                "ArielService",
-                "Background monitoring idle: enabled=$backgroundMonitoringEnabled friends=${savedFriends.size}"
-            )
+        if (!MonitoringPreferences.shouldRunBackgroundMonitoring(trustedFriendCount = savedFriends.size)) {
+            Log.d("ArielService", "Background monitoring idle: no trusted friends")
             nearbyManager?.stopPairing()
             stopBackgroundMonitoringJobs()
             MonitoringSafetyWorker.cancel(applicationContext)
+            DailyRegistrationWorker.cancel(applicationContext)
             nearbyOnlineBuddyIds = emptySet()
             relayOnlineBuddyIds = emptySet()
             onlineBuddyCount = 0

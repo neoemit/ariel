@@ -877,7 +877,6 @@ fun SettingsScreen(
     val context = LocalContext.current
     val ringtoneUri by viewModel.panicRingtoneUri.collectAsState()
     val discreetModeEnabled by viewModel.discreetModeEnabled.collectAsState()
-    val backgroundMonitoringEnabled by viewModel.backgroundMonitoringEnabled.collectAsState()
     val relayBackendUrl by viewModel.relayBackendUrl.collectAsState()
     val ringtoneName = remember(ringtoneUri) {
         if (ringtoneUri == null) {
@@ -1076,100 +1075,7 @@ fun SettingsScreen(
             }
         }
 
-        // 3) Background monitoring and battery reliability
-        item {
-            ElevatedCard(shape = RoundedCornerShape(20.dp)) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Notifications,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = context.getString(R.string.settings_background_monitoring_title),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-
-                    Text(
-                        text = context.getString(R.string.settings_background_monitoring_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .toggleable(
-                                    value = backgroundMonitoringEnabled,
-                                    onValueChange = viewModel::setBackgroundMonitoringEnabled,
-                                    role = Role.Switch
-                                )
-                                .semantics {
-                                    contentDescription = context.getString(R.string.settings_background_monitoring_title)
-                                    stateDescription = if (backgroundMonitoringEnabled) {
-                                        context.getString(R.string.settings_background_monitoring_enabled)
-                                    } else {
-                                        context.getString(R.string.settings_background_monitoring_disabled)
-                                    }
-                                }
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = if (backgroundMonitoringEnabled) {
-                                        context.getString(R.string.settings_background_monitoring_enabled)
-                                    } else {
-                                        context.getString(R.string.settings_background_monitoring_disabled)
-                                    },
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = context.getString(R.string.settings_background_monitoring_toggle_desc),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = backgroundMonitoringEnabled,
-                                onCheckedChange = null
-                            )
-                        }
-                    }
-
-                    FilledTonalButton(
-                        onClick = viewModel::requestBatteryOptimizationExemption,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(context.getString(R.string.settings_battery_exemption_action))
-                    }
-                    Text(
-                        text = context.getString(R.string.settings_battery_exemption_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
-        // 4) Internet relay (collapsed by default, expandable)
+        // 3) Internet relay (collapsed by default, expandable)
         item {
             ElevatedCard(shape = RoundedCornerShape(20.dp)) {
                 Column(

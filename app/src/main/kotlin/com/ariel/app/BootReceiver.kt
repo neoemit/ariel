@@ -35,11 +35,7 @@ class BootReceiver : BroadcastReceiver() {
             ?.map { it.trim() }
             ?.count { it.isNotBlank() }
             ?: 0
-        if (!MonitoringPreferences.shouldRunBackgroundMonitoring(
-                backgroundMonitoringEnabled = MonitoringPreferences.isBackgroundMonitoringEnabled(prefs),
-                trustedFriendCount = trustedFriendCount,
-            )
-        ) {
+        if (!MonitoringPreferences.shouldRunBackgroundMonitoring(trustedFriendCount = trustedFriendCount)) {
             Log.d("BootReceiver", "Skipping monitor startup from $action; monitoring disabled or no friends")
             MonitoringSafetyWorker.cancel(context)
             return

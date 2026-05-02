@@ -79,13 +79,6 @@
     <string name="settings_discreet_mode_sound_off">Off (Discreet mode)</string>
     <string name="settings_discreet_mode_enabled">Enabled</string>
     <string name="settings_discreet_mode_disabled">Disabled</string>
-    <string name="settings_background_monitoring_title">Background emergency monitoring</string>
-    <string name="settings_background_monitoring_desc">Keep Ariel armed in the background for buddy alerts. This improves reliability but can use more battery.</string>
-    <string name="settings_background_monitoring_toggle_desc">Balanced mode reduces background work when idle; turn this off if you only want monitoring while the app is open or during active alerts.</string>
-    <string name="settings_background_monitoring_enabled">Background monitoring on</string>
-    <string name="settings_background_monitoring_disabled">Background monitoring off</string>
-    <string name="settings_battery_exemption_action">Improve background reliability</string>
-    <string name="settings_battery_exemption_desc">Optional: ask Android to exempt Ariel from battery optimisation. This can increase battery use and is no longer requested automatically.</string>
     <string name="settings_danger_zone">Danger zone</string>
     <string name="settings_danger_zone_desc">Reset all buddy links and clear local pairing data on this device.</string>
     <string name="permissions_section_title">Permissions</string>

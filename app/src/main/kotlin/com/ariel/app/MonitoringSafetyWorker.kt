@@ -23,11 +23,7 @@ class MonitoringSafetyWorker(
             ?.map { it.trim() }
             ?.count { it.isNotBlank() }
             ?: 0
-        if (!MonitoringPreferences.shouldRunBackgroundMonitoring(
-                backgroundMonitoringEnabled = MonitoringPreferences.isBackgroundMonitoringEnabled(prefs),
-                trustedFriendCount = trustedFriendCount,
-            )
-        ) {
+        if (!MonitoringPreferences.shouldRunBackgroundMonitoring(trustedFriendCount = trustedFriendCount)) {
             Log.d("ArielDiagnostics", "monitoring_safety_worker skipped friends=$trustedFriendCount")
             cancel(applicationContext)
             return Result.success()
@@ -56,11 +52,7 @@ class MonitoringSafetyWorker(
                 ?.map { it.trim() }
                 ?.count { it.isNotBlank() }
                 ?: 0
-            if (!MonitoringPreferences.shouldRunBackgroundMonitoring(
-                    backgroundMonitoringEnabled = MonitoringPreferences.isBackgroundMonitoringEnabled(prefs),
-                    trustedFriendCount = trustedFriendCount,
-                )
-            ) {
+            if (!MonitoringPreferences.shouldRunBackgroundMonitoring(trustedFriendCount = trustedFriendCount)) {
                 cancel(context)
                 return
             }
