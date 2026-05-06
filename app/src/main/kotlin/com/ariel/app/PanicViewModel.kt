@@ -57,6 +57,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
     val onlineBuddyIds = _onlineBuddyIds.asStateFlow()
     private val _onlineBuddies = MutableStateFlow<List<OnlineBuddy>>(emptyList())
     val onlineBuddies = _onlineBuddies.asStateFlow()
+    private val _recentlySeenOnlineBuddies = MutableStateFlow<List<OnlineBuddy>>(emptyList())
+    val recentlySeenOnlineBuddies = _recentlySeenOnlineBuddies.asStateFlow()
 
     private var relayPresencePollingJob: Job? = null
     private var zeroConfirmationJob: Job? = null
@@ -145,6 +147,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             prefs.getString("nickname_$id", null)?.let { currentNicknames[id] = it }
         }
         _nicknames.value = currentNicknames
+        refreshRecentlySeenOnlineBuddies()
 
         context.startService(Intent(context, SirenService::class.java).apply {
             action = "START_MONITORING"
@@ -195,6 +198,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         if (currentFriends.add(normalizedName)) {
             _friends.value = currentFriends.toList()
             prefs.edit().putStringSet("friends", currentFriends).apply()
+            refreshRecentlySeenOnlineBuddies()
             context.startService(Intent(context, SirenService::class.java).apply {
                 action = "ADD_FRIEND"
                 putExtra("FRIEND_NAME", normalizedName)
@@ -217,6 +221,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             val currentNicknames = _nicknames.value.toMutableMap()
             currentNicknames.remove(normalizedName)
             _nicknames.value = currentNicknames
+            refreshRecentlySeenOnlineBuddies()
 
             context.startService(Intent(context, SirenService::class.java).apply {
                 action = "REMOVE_FRIEND"
@@ -236,6 +241,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             prefs.edit().putString("nickname_$id", nickname).apply()
         }
         _nicknames.value = currentNicknames
+        refreshRecentlySeenOnlineBuddies()
     }
 
     fun setRelayBackendUrl(url: String) {
@@ -396,6 +402,33 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             .sortedWith(compareBy<OnlineBuddy> { it.displayName.lowercase() }.thenBy { it.id })
     }
 
+    private fun refreshRecentlySeenOnlineBuddies() {
+        val cachedIds = prefs.getStringSet(PREF_LAST_ONLINE_BUDDY_IDS, emptySet()) ?: emptySet()
+        val seenAtMs = prefs.getLong(PREF_LAST_ONLINE_BUDDY_SEEN_AT_MS, 0L)
+        val recentIds = recentlySeenOnlineBuddyIds(
+            cachedBuddyIds = cachedIds,
+            trustedBuddyIds = _friends.value.toSet(),
+            seenAtMs = seenAtMs,
+            nowMs = System.currentTimeMillis(),
+            maxAgeMs = RECENTLY_SEEN_BUDDY_WINDOW_MS,
+        )
+        _recentlySeenOnlineBuddies.value = buildOnlineBuddies(recentIds)
+    }
+
+    private fun persistRecentlySeenOnlineBuddies(onlineIds: Set<String>, seenAtMs: Long) {
+        val normalizedIds = onlineIds
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .toSet()
+        if (normalizedIds.isEmpty()) return
+
+        prefs.edit()
+            .putStringSet(PREF_LAST_ONLINE_BUDDY_IDS, normalizedIds)
+            .putLong(PREF_LAST_ONLINE_BUDDY_SEEN_AT_MS, seenAtMs)
+            .apply()
+        _recentlySeenOnlineBuddies.value = buildOnlineBuddies(normalizedIds)
+    }
+
     private fun computeRawReachableCount(): Int {
         return computeOnlineBuddyIds().size
     }
@@ -451,6 +484,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             _isPresenceChecking.value = false
             hasCompletedFirstPresenceSync = true
             lastReachableAtMs = now
+            persistRecentlySeenOnlineBuddies(onlineIds, seenAtMs = now)
             logReachabilityState(reason = "${reason}_reachable", rawCount = rawCount, withinGrace = false)
             return
         }
@@ -544,6 +578,9 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         const val OFFLINE_GRACE_WINDOW_MS = 120_000L
         const val PRESENCE_ZERO_CONFIRM_DELAY_MS = 2_500L
         const val FORCE_RECONCILIATION_MIN_INTERVAL_MS = 5_000L
+        const val RECENTLY_SEEN_BUDDY_WINDOW_MS = 5 * 60 * 1000L
+        const val PREF_LAST_ONLINE_BUDDY_IDS = "last_online_buddy_ids"
+        const val PREF_LAST_ONLINE_BUDDY_SEEN_AT_MS = "last_online_buddy_seen_at_ms"
         const val ESCALATION_GENERIC = "GENERIC"
         const val ESCALATION_MEDICAL = "MEDICAL"
         const val ESCALATION_ARMED = "ARMED"

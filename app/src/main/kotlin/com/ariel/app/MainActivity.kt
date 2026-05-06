@@ -141,13 +141,30 @@ fun PanicScreen(
 
     val isPresenceChecking by viewModel.isPresenceChecking.collectAsState()
     val onlineBuddies by viewModel.onlineBuddies.collectAsState()
+    val recentlySeenOnlineBuddies by viewModel.recentlySeenOnlineBuddies.collectAsState()
     val incomingPanicSender by viewModel.incomingPanicSender.collectAsState()
     val onlineBuddySnapshot = remember(onlineBuddies) {
         onlineBuddies
             .distinctBy { it.id.trim().lowercase() }
             .sortedWith(compareBy<OnlineBuddy> { it.displayName.lowercase() }.thenBy { it.id.lowercase() })
     }
+    val recentlySeenBuddySnapshot = remember(recentlySeenOnlineBuddies) {
+        recentlySeenOnlineBuddies
+            .distinctBy { it.id.trim().lowercase() }
+            .sortedWith(compareBy<OnlineBuddy> { it.displayName.lowercase() }.thenBy { it.id.lowercase() })
+    }
     val peerCount = onlineBuddySnapshot.size
+    val recentPeerCount = recentlySeenBuddySnapshot.size
+    val availabilityStatus = presenceAvailabilityStatus(
+        confirmedOnlineCount = peerCount,
+        recentlySeenOnlineCount = recentPeerCount,
+        isPresenceChecking = isPresenceChecking,
+    )
+    val displayedBuddySnapshot = if (availabilityStatus == PresenceAvailabilityStatus.RECENTLY_SEEN_CHECKING) {
+        recentlySeenBuddySnapshot
+    } else {
+        onlineBuddySnapshot
+    }
     var showOnlineBuddiesDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -170,10 +187,11 @@ fun PanicScreen(
         // Status Bar at the top
         Surface(
             shape = CircleShape,
-            color = when {
-                peerCount > 0 -> Color(0xFF1B5E20)
-                isPresenceChecking -> Color(0xFF5D4037)
-                else -> Color(0xFF333333)
+            color = when (availabilityStatus) {
+                PresenceAvailabilityStatus.ONLINE_CONFIRMED -> Color(0xFF1B5E20)
+                PresenceAvailabilityStatus.RECENTLY_SEEN_CHECKING -> Color(0xFF5D4037)
+                PresenceAvailabilityStatus.UNKNOWN_CHECKING -> Color(0xFF5D4037)
+                PresenceAvailabilityStatus.OFFLINE_CONFIRMED -> Color(0xFF333333)
             },
             modifier = Modifier
                 .padding(bottom = 48.dp)
@@ -185,24 +203,28 @@ fun PanicScreen(
             ) {
                 Box(
                     modifier = Modifier.size(8.dp).background(
-                        when {
-                            peerCount > 0 -> Color.Green
-                            isPresenceChecking -> Color(0xFFFFC107)
-                            else -> Color.Gray
+                        when (availabilityStatus) {
+                            PresenceAvailabilityStatus.ONLINE_CONFIRMED -> Color.Green
+                            PresenceAvailabilityStatus.RECENTLY_SEEN_CHECKING -> Color(0xFFFFC107)
+                            PresenceAvailabilityStatus.UNKNOWN_CHECKING -> Color(0xFFFFC107)
+                            PresenceAvailabilityStatus.OFFLINE_CONFIRMED -> Color.Gray
                         },
                         CircleShape
                     )
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 // singular/plural handling
-                val onlineText = when (peerCount) {
-                    0 -> if (isPresenceChecking) {
-                        ctx.getString(R.string.status_checking_online)
-                    } else {
-                        ctx.getString(R.string.status_none_online)
+                val onlineText = when (availabilityStatus) {
+                    PresenceAvailabilityStatus.ONLINE_CONFIRMED -> when (peerCount) {
+                        1 -> ctx.getString(R.string.status_one_online)
+                        else -> ctx.getString(R.string.status_many_online, peerCount)
                     }
-                    1 -> ctx.getString(R.string.status_one_online)
-                    else -> ctx.getString(R.string.status_many_online, peerCount)
+                    PresenceAvailabilityStatus.RECENTLY_SEEN_CHECKING -> when (recentPeerCount) {
+                        1 -> ctx.getString(R.string.status_one_recently_seen_checking)
+                        else -> ctx.getString(R.string.status_many_recently_seen_checking, recentPeerCount)
+                    }
+                    PresenceAvailabilityStatus.UNKNOWN_CHECKING -> ctx.getString(R.string.status_checking_online)
+                    PresenceAvailabilityStatus.OFFLINE_CONFIRMED -> ctx.getString(R.string.status_none_online)
                 }
                 Text(
                     text = onlineText,
@@ -217,24 +239,33 @@ fun PanicScreen(
                 onDismissRequest = { showOnlineBuddiesDialog = false },
                 title = { Text(ctx.getString(R.string.online_buddies_title)) },
                 text = {
-                    if (onlineBuddySnapshot.isEmpty()) {
+                    if (displayedBuddySnapshot.isEmpty()) {
                         Text(
                             text = ctx.getString(R.string.online_buddies_empty),
                             style = MaterialTheme.typography.bodyMedium
                         )
                     } else {
-                        LazyColumn(
-                            modifier = Modifier.heightIn(max = 320.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(
-                                items = onlineBuddySnapshot,
-                                key = { buddy -> buddy.id.trim().lowercase() }
-                            ) { buddy ->
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (availabilityStatus == PresenceAvailabilityStatus.RECENTLY_SEEN_CHECKING) {
                                 Text(
-                                    text = buddy.displayName,
-                                    style = MaterialTheme.typography.bodyLarge
+                                    text = ctx.getString(R.string.online_buddies_recently_seen_note),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFFFFC107)
                                 )
+                            }
+                            LazyColumn(
+                                modifier = Modifier.heightIn(max = 320.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(
+                                    items = displayedBuddySnapshot,
+                                    key = { buddy -> buddy.id.trim().lowercase() }
+                                ) { buddy ->
+                                    Text(
+                                        text = buddy.displayName,
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                }
                             }
                         }
                     }

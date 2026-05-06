@@ -10,11 +10,14 @@
     <string name="status_checking_online">Checking Buddy Availability…</string>
     <string name="status_one_online">1 Buddy Online</string>
     <string name="status_many_online">%1$d Buddies Online</string>
+    <string name="status_one_recently_seen_checking">1 Buddy Seen Recently — Checking…</string>
+    <string name="status_many_recently_seen_checking">%1$d Buddies Seen Recently — Checking…</string>
     <string name="incoming_alert_active_title">Incoming panic alert</string>
     <string name="incoming_alert_active_body">%1$s needs help. Tap below to acknowledge and stop this alert on your device.</string>
     <string name="incoming_alert_ack_action">Acknowledge now</string>
     <string name="online_buddies_title">Buddies Online</string>
     <string name="online_buddies_empty">No buddies are currently online.</string>
+    <string name="online_buddies_recently_seen_note">These buddies were seen recently. Ariel is checking current availability now, and panic alerts are still sent to all trusted buddies.</string>
     <string name="alert_active">ALERT ACTIVE</string>
     <string name="alert_notified">Your buddies have been notified</string>
     <string name="reset_panic">RESET PANIC</string>
