@@ -48,6 +48,7 @@ class SirenService : Service() {
     private val relayRegistrationMinIntervalMs = 45_000L
     private val connectivityRegistrationMinIntervalMs = 10_000L
     private val relayBootstrapDelaysMs = listOf(15_000L, 30_000L)
+    private val relayHeartbeatIntervalMs = 90_000L
     private val tokenRetryBackoffMs = longArrayOf(30_000L, 60_000L, 120_000L, 300_000L)
 
     private var nearbyManager: NearbyManager? = null
@@ -59,6 +60,7 @@ class SirenService : Service() {
     private val handledAckIds = LinkedHashSet<String>()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var relayBootstrapRetryJob: Job? = null
+    private var relayHeartbeatJob: Job? = null
     private var tokenRefreshRetryJob: Job? = null
     private var cachedFcmToken: String? = null
     private var lastRelayRegistrationAtMs: Long = 0L
@@ -212,6 +214,7 @@ class SirenService : Service() {
         showMonitorNotification()
         syncPushRegistration(force = true, reason = "start_monitoring")
         startRelayBootstrapRetries()
+        startRelayHeartbeat()
     }
 
     private fun getOrCreateMyName(prefs: android.content.SharedPreferences): String {
@@ -234,6 +237,8 @@ class SirenService : Service() {
     private fun stopBackgroundMonitoringJobs() {
         relayBootstrapRetryJob?.cancel()
         relayBootstrapRetryJob = null
+        relayHeartbeatJob?.cancel()
+        relayHeartbeatJob = null
     }
 
     private fun syncPushRegistration(force: Boolean, reason: String) {
@@ -350,6 +355,16 @@ class SirenService : Service() {
                 if (success) break
             }
             relayBootstrapRetryJob = null
+        }
+    }
+
+    private fun startRelayHeartbeat() {
+        if (relayHeartbeatJob?.isActive == true) return
+        relayHeartbeatJob = serviceScope.launch {
+            while (isActive) {
+                delay(relayHeartbeatIntervalMs)
+                performPushRegistration(force = true, reason = "heartbeat")
+            }
         }
     }
 
@@ -759,6 +774,8 @@ class SirenService : Service() {
         wakeLock = null
         relayBootstrapRetryJob?.cancel()
         relayBootstrapRetryJob = null
+        relayHeartbeatJob?.cancel()
+        relayHeartbeatJob = null
         tokenRefreshRetryJob?.cancel()
         tokenRefreshRetryJob = null
         serviceScope.cancel()
