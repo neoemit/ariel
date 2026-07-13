@@ -1,2 +1,2 @@
 Latest changes:
-• Keeps Ariel’s persistent notification compact with only the active status title shown.
+• Keeps Ariel’s persistent notification in its compact collapsed layout when opened.
