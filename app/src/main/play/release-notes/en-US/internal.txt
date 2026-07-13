@@ -1,0 +1,2 @@
+Latest changes:
+• Keeps Ariel’s persistent notification compact with only the active status title shown.

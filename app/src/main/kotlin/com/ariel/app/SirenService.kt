@@ -480,7 +480,8 @@ class SirenService : Service() {
         )
         return NotificationCompat.Builder(this, monitorChannelId)
             .setContentTitle("Ariel is active")
-            .setContentText(getString(R.string.notification_monitor_text))
+            // Keep the foreground-service notification compact: no content text and no
+            // expanded style means Android has only the collapsed, title-only layout to show.
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)

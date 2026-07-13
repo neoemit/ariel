@@ -4,8 +4,6 @@
     <string name="nav_pairing">Pairing</string>
     <string name="nav_settings">Settings</string>
 
-    <string name="notification_monitor_text">Listening for signals from paired buddies</string>
-
     <string name="status_none_online">No Buddies Online</string>
     <string name="status_checking_online">Checking Buddy Availability…</string>
     <string name="status_one_online">1 Buddy Online</string>
