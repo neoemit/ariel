@@ -21,7 +21,6 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
-import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineScope
@@ -479,26 +478,13 @@ class SirenService : Service() {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val compactNotificationView = RemoteViews(
-            packageName,
-            R.layout.notification_monitor_compact
-        )
-
         return NotificationCompat.Builder(this, monitorChannelId)
             .setContentTitle("Ariel is active")
+            // Keep the foreground-service notification compact: no content text and no
+            // expanded style means Android has only the collapsed, title-only layout to show.
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setShowWhen(false)
-            // Use the same compact custom layout for every system presentation. Some
-            // Android notification surfaces open foreground-service notifications in
-            // an expanded template by default; providing identical collapsed, big,
-            // and heads-up RemoteViews keeps the persistent monitor notification
-            // visually collapsed whenever the notification shade/view is invoked.
-            .setCustomContentView(compactNotificationView)
-            .setCustomBigContentView(compactNotificationView)
-            .setCustomHeadsUpContentView(compactNotificationView)
             .setContentIntent(pendingIntent)
             .build()
     }
