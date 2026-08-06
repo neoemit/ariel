@@ -48,14 +48,14 @@ val playServiceAccountCredentialsPath = envOrLocalProperty(
 
 android {
     namespace = "com.thomaslamendola.ariel"
-    compileSdk = 35
+    compileSdk = 36
 
-    val appVersionMinor = 62
+    val appVersionMinor = 63
 
     defaultConfig {
         applicationId = "com.thomaslamendola.ariel"
         minSdk = 31
-        targetSdk = 35
+        targetSdk = 36
         versionCode = appVersionMinor
         versionName = "1.$appVersionMinor"
         buildConfigField("String", "FIREBASE_API_KEY", "\"${escapedLocalProperty("firebase.apiKey")}\"")
