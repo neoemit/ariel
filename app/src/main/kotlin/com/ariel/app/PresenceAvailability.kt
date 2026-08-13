@@ -31,6 +31,21 @@ internal fun recentlySeenOnlineBuddyIds(
         .toSet()
 }
 
+/**
+ * Discovery (Nearby advertising/discovery plus the first relay presence round trips) routinely
+ * needs far longer than a single poll to surface a buddy, so the badge keeps saying "checking"
+ * until this window elapses instead of prematurely settling on "no buddies online".
+ */
+internal fun isWithinInitialDiscoveryWindow(
+    discoveryStartedAtMs: Long,
+    nowMs: Long,
+    windowMs: Long,
+): Boolean {
+    if (discoveryStartedAtMs <= 0L || windowMs <= 0L) return false
+    if (nowMs < discoveryStartedAtMs) return true
+    return nowMs - discoveryStartedAtMs < windowMs
+}
+
 internal fun presenceAvailabilityStatus(
     confirmedOnlineCount: Int,
     recentlySeenOnlineCount: Int,

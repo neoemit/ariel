@@ -62,6 +62,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
 
     private var relayPresencePollingJob: Job? = null
     private var zeroConfirmationJob: Job? = null
+    private var initialDiscoveryJob: Job? = null
+    private var discoveryStartedAtMs: Long = System.currentTimeMillis()
     private var hasCompletedFirstPresenceSync = false
     private var lastReachableAtMs: Long = 0L
     private var lastForcedReconciliationAtMs: Long = 0L
@@ -203,6 +205,7 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
                 action = "ADD_FRIEND"
                 putExtra("FRIEND_NAME", normalizedName)
             })
+            restartDiscoveryWindow(reason = "friend_added")
             viewModelScope.launch { refreshRelayPresence() }
         }
     }
@@ -294,6 +297,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         nearbyEndpointCount.value = 0
         zeroConfirmationJob?.cancel()
         zeroConfirmationJob = null
+        initialDiscoveryJob?.cancel()
+        initialDiscoveryJob = null
         hasCompletedFirstPresenceSync = true
         lastReachableAtMs = 0L
         _isPresenceChecking.value = false
@@ -322,9 +327,44 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         isUiActive = active
 
         if (active) {
+            if (_peerCount.value == 0) {
+                restartDiscoveryWindow(reason = "ui_active")
+            }
             startRelayPresencePolling()
         } else {
             stopRelayPresencePolling()
+            initialDiscoveryJob?.cancel()
+            initialDiscoveryJob = null
+        }
+    }
+
+    private fun restartDiscoveryWindow(reason: String) {
+        discoveryStartedAtMs = System.currentTimeMillis()
+        initialDiscoveryJob?.cancel()
+        initialDiscoveryJob = null
+        zeroConfirmationJob?.cancel()
+        zeroConfirmationJob = null
+        updateCombinedPeerCount(reason = "discovery_window_$reason")
+    }
+
+    /**
+     * Keeps nudging both channels while the discovery window is open so a buddy that only shows up
+     * after several seconds still flips the badge to green before we ever say "no buddies online".
+     */
+    private fun startInitialDiscoveryJob() {
+        if (initialDiscoveryJob?.isActive == true) return
+
+        initialDiscoveryJob = viewModelScope.launch {
+            while (isActive) {
+                val remainingMs = discoveryStartedAtMs + PRESENCE_INITIAL_DISCOVERY_WINDOW_MS -
+                    System.currentTimeMillis()
+                if (remainingMs <= 0L) break
+                delay(minOf(remainingMs, PRESENCE_INITIAL_DISCOVERY_RETRY_INTERVAL_MS))
+                if (computeRawReachableCount() > 0) break
+                requestImmediateReconciliation(reason = "initial_discovery_retry")
+            }
+            initialDiscoveryJob = null
+            updateCombinedPeerCount(reason = "initial_discovery_elapsed")
         }
     }
 
@@ -459,7 +499,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
                 "nearbyEndpoints=${nearbyEndpointCount.value} nearbyIds=${nearbyOnlineIds.value.size} " +
                 "relayIds=${relayOnlineIds.value.size} relayStale=$isRelayPresenceStale relayAgeMs=$relayAgeMs " +
                 "onlineIds=${_onlineBuddyIds.value.size} grace=$withinGrace checking=${_isPresenceChecking.value} " +
-                "firstSyncCompleted=$hasCompletedFirstPresenceSync"
+                "firstSyncCompleted=$hasCompletedFirstPresenceSync " +
+                "discoveryElapsedMs=${System.currentTimeMillis() - discoveryStartedAtMs}"
         )
     }
 
@@ -478,6 +519,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         if (rawCount > 0) {
             zeroConfirmationJob?.cancel()
             zeroConfirmationJob = null
+            initialDiscoveryJob?.cancel()
+            initialDiscoveryJob = null
             _onlineBuddyIds.value = onlineIds
             _onlineBuddies.value = onlineBuddyList
             _peerCount.value = onlineBuddyList.size
@@ -492,6 +535,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         if (!hasFriends) {
             zeroConfirmationJob?.cancel()
             zeroConfirmationJob = null
+            initialDiscoveryJob?.cancel()
+            initialDiscoveryJob = null
             _peerCount.value = 0
             _onlineBuddyIds.value = emptySet()
             _onlineBuddies.value = emptyList()
@@ -512,6 +557,18 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
             _isPresenceChecking.value = true
             requestImmediateReconciliation(reason = "${reason}_first_sync")
             logReachabilityState(reason = "${reason}_first_sync", rawCount = rawCount, withinGrace = false)
+            return
+        }
+
+        val withinDiscoveryWindow = isWithinInitialDiscoveryWindow(
+            discoveryStartedAtMs = discoveryStartedAtMs,
+            nowMs = now,
+            windowMs = PRESENCE_INITIAL_DISCOVERY_WINDOW_MS,
+        )
+        if (withinDiscoveryWindow) {
+            _isPresenceChecking.value = true
+            startInitialDiscoveryJob()
+            logReachabilityState(reason = "${reason}_discovery_window", rawCount = rawCount, withinGrace = false)
             return
         }
 
@@ -566,6 +623,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         stopRelayPresencePolling()
         zeroConfirmationJob?.cancel()
         zeroConfirmationJob = null
+        initialDiscoveryJob?.cancel()
+        initialDiscoveryJob = null
         runCatching { context.unregisterReceiver(appReceiver) }
         super.onCleared()
     }
@@ -577,6 +636,8 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         const val PRESENCE_STALE_AFTER_SECONDS = 180
         const val OFFLINE_GRACE_WINDOW_MS = 120_000L
         const val PRESENCE_ZERO_CONFIRM_DELAY_MS = 2_500L
+        const val PRESENCE_INITIAL_DISCOVERY_WINDOW_MS = 60_000L
+        const val PRESENCE_INITIAL_DISCOVERY_RETRY_INTERVAL_MS = 6_000L
         const val FORCE_RECONCILIATION_MIN_INTERVAL_MS = 5_000L
         const val RECENTLY_SEEN_BUDDY_WINDOW_MS = 5 * 60 * 1000L
         const val PREF_LAST_ONLINE_BUDDY_IDS = "last_online_buddy_ids"

@@ -1,6 +1,7 @@
 package com.thomaslamendola.ariel
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,6 +30,59 @@ class RecentOnlineBuddiesTest {
         )
 
         assertTrue(recent.isEmpty())
+    }
+
+    @Test
+    fun `discovery window keeps checking until it fully elapses`() {
+        val startedAtMs = 10_000L
+        val windowMs = 60_000L
+
+        assertTrue(
+            isWithinInitialDiscoveryWindow(
+                discoveryStartedAtMs = startedAtMs,
+                nowMs = startedAtMs,
+                windowMs = windowMs,
+            )
+        )
+        assertTrue(
+            isWithinInitialDiscoveryWindow(
+                discoveryStartedAtMs = startedAtMs,
+                nowMs = startedAtMs + windowMs - 1,
+                windowMs = windowMs,
+            )
+        )
+        assertFalse(
+            isWithinInitialDiscoveryWindow(
+                discoveryStartedAtMs = startedAtMs,
+                nowMs = startedAtMs + windowMs,
+                windowMs = windowMs,
+            )
+        )
+    }
+
+    @Test
+    fun `discovery window tolerates clock going backwards and is skippable`() {
+        assertTrue(
+            isWithinInitialDiscoveryWindow(
+                discoveryStartedAtMs = 10_000L,
+                nowMs = 1_000L,
+                windowMs = 60_000L,
+            )
+        )
+        assertFalse(
+            isWithinInitialDiscoveryWindow(
+                discoveryStartedAtMs = 0L,
+                nowMs = 10_000L,
+                windowMs = 60_000L,
+            )
+        )
+        assertFalse(
+            isWithinInitialDiscoveryWindow(
+                discoveryStartedAtMs = 10_000L,
+                nowMs = 10_001L,
+                windowMs = 0L,
+            )
+        )
     }
 
     @Test
