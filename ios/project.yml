@@ -51,6 +51,8 @@ targets:
       - target: ArielWidget
         embed: true
       - package: Firebase
+        product: FirebaseCore
+      - package: Firebase
         product: FirebaseMessaging
     postBuildScripts:
       - name: Bundle GoogleService-Info.plist

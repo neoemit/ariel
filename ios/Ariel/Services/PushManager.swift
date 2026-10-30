@@ -2,6 +2,7 @@ import FirebaseCore
 import FirebaseMessaging
 import Foundation
 import UIKit
+import UserNotifications
 
 /// Firebase Cloud Messaging, which the relay uses for every platform: FCM hands iOS messages to APNs.
 /// Only builds with push (ARIEL_PUSH_ENABLED and GoogleService-Info.plist, docs/ios.md) configure it;

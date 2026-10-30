@@ -19,6 +19,12 @@ struct IncomingAlert: Identifiable, Equatable, Sendable {
     var id: String { eventId }
 }
 
+struct PendingAcknowledgment: Equatable, Sendable {
+    let senderId: String
+    let eventId: String
+    let displayName: String
+}
+
 /// Where this device's own panic is.
 enum PanicDelivery: Equatable, Sendable {
     case idle
@@ -66,6 +72,9 @@ final class ArielModel {
 
     // Incoming panic
     private(set) var incomingAlert: IncomingAlert?
+    /// An acknowledgment the relay never took: the sender does not know help is coming.
+    private(set) var acknowledgmentFailed: PendingAcknowledgment?
+    @ObservationIgnored private var acknowledgmentsInFlight: Set<String> = []
 
     // Presence
     private(set) var onlineBuddies: [Buddy] = []
@@ -99,6 +108,8 @@ final class ArielModel {
     @ObservationIgnored private var foregroundTasks: [Task<Void, Never>] = []
     @ObservationIgnored private var acknowledgmentTask: Task<Void, Never>?
     @ObservationIgnored private var inboxPollInFlight = false
+    /// Panics that arrived while another was on screen; shown one after the other.
+    @ObservationIgnored private var queuedAlerts: [IncomingAlert] = []
 
     private init(prefs: Preferences = Preferences(), configuration: AppConfiguration = .load()) {
         self.prefs = prefs
@@ -324,10 +335,16 @@ final class ArielModel {
                 // Opens the alert, unless it is on screen already or was answered.
                 guard incomingAlert?.eventId != eventId, !prefs.isAcknowledged(eventId: eventId) else { return }
             }
+            guard !queuedAlerts.contains(where: { $0.eventId == eventId }) else { return }
             let alert = IncomingAlert(
                 senderId: senderId, displayName: displayName(for: senderId), eventId: eventId, escalation: escalation
             )
-            incomingAlert = alert
+            // Never replace an unanswered alert: its sender is still waiting.
+            if incomingAlert == nil {
+                incomingAlert = alert
+            } else {
+                queuedAlerts.append(alert)
+            }
             guard origin == .live else { return }
             if isActive {
                 player.start(discreet: discreetMode)
@@ -347,37 +364,62 @@ final class ArielModel {
 
     /// The user is on their way: stop the siren and tell the sender, through the relay.
     func acknowledgeIncomingAlert() async {
-        player.stop()
-        guard let alert = incomingAlert else { return }
-        incomingAlert = nil
+        guard let alert = incomingAlert else {
+            player.stop()
+            return
+        }
+        showNextAlert()
         await acknowledge(senderId: alert.senderId, eventId: alert.eventId)
+    }
+
+    /// Shows the next queued panic, still ringing, or stops the siren when there is none.
+    private func showNextAlert() {
+        if queuedAlerts.isEmpty {
+            incomingAlert = nil
+            player.stop()
+        } else {
+            incomingAlert = queuedAlerts.removeFirst()
+        }
     }
 
     /// "I am coming!" on a panic notification, without opening the app.
     func acknowledge(_ event: RelayEvent) async {
         guard case .panic(let senderId, let eventId, _) = event else { return }
         _ = prefs.markHandled(event)
+        queuedAlerts.removeAll { $0.eventId == eventId }
         if incomingAlert?.eventId == eventId {
-            player.stop()
-            incomingAlert = nil
+            showNextAlert()
         }
         await acknowledge(senderId: senderId, eventId: eventId)
     }
 
     private func acknowledge(senderId: String, eventId: String) async {
         notifications.removeDelivered(eventId: eventId)
-        guard prefs.noteAcknowledged(eventId: eventId) else { return }
-        // The sender is waiting for this: try a few times before giving up.
-        for attempt in 1...3 {
+        guard !prefs.isAcknowledged(eventId: eventId), !acknowledgmentsInFlight.contains(eventId) else { return }
+        acknowledgmentsInFlight.insert(eventId)
+        defer { acknowledgmentsInFlight.remove(eventId) }
+        // The sender is waiting for this: keep trying for a while, and only then record it as sent.
+        for attempt in 1...5 {
             do {
                 try await relay.sendAcknowledgment(senderId: senderId, acknowledgerId: myId, eventId: eventId)
                 noteRelaySuccess()
+                _ = prefs.noteAcknowledged(eventId: eventId)
+                acknowledgmentFailed = nil
                 return
             } catch {
                 noteRelayFailure(error)
-                if attempt < 3 { try? await Task.sleep(for: .seconds(3)) }
+                if attempt < 5 { try? await Task.sleep(for: .seconds(3)) }
             }
         }
+        acknowledgmentFailed = PendingAcknowledgment(senderId: senderId, eventId: eventId,
+                                                      displayName: displayName(for: senderId))
+    }
+
+    /// Tries a failed acknowledgment again (the panic screen offers it).
+    func retryAcknowledgment() async {
+        guard let pending = acknowledgmentFailed else { return }
+        acknowledgmentFailed = nil
+        await acknowledge(senderId: pending.senderId, eventId: pending.eventId)
     }
 
     private func showAcknowledgment(from name: String) {

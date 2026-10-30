@@ -82,6 +82,15 @@ struct PairingView: View {
                 }
             }
             .navigationTitle("Pairing")
+            // The incoming alert covers everything; it cannot while a sheet or alert is up.
+            .onChange(of: model.incomingAlert?.id) { _, id in
+                guard id != nil else { return }
+                scanning = false
+                enteringId = false
+                editing = nil
+                removing = nil
+                message = nil
+            }
             .sheet(isPresented: $scanning, onDismiss: {
                 // Added once the scanner is gone, so that a refusal can show.
                 if let code = scannedCode {

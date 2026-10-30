@@ -26,7 +26,11 @@ struct RootView: View {
                 .environment(model)
                 .preferredColorScheme(.dark)
         }
-        .sheet(isPresented: Binding(get: { model.needsOnboarding }, set: { if !$0 { model.completeOnboarding() } })) {
+        .sheet(isPresented: Binding(
+            // Out of the way of an incoming alert, which cannot show over it.
+            get: { model.needsOnboarding && model.incomingAlert == nil },
+            set: { if !$0 && model.incomingAlert == nil { model.completeOnboarding() } }
+        )) {
             OnboardingView()
                 .environment(model)
                 .interactiveDismissDisabled()

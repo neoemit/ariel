@@ -13,10 +13,11 @@
 		22DC60688AD07367F605F60E /* QRCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF41E8192B4BDB2BC2F13BD7 /* QRCodeView.swift */; };
 		2865F6EA29D70572AD4B6FD3 /* PanicWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B66A6EEAFB3BC79148F1973 /* PanicWidget.swift */; };
 		296047242066B93BB64AF670 /* PresenceTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 234D11A36927A476480A1DD2 /* PresenceTrackerTests.swift */; };
-		2BC2FE62CFC257E165294BDD /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 64193EFA51630BF2A6B6F871 /* FirebaseMessaging */; };
+		2BC2FE62CFC257E165294BDD /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6CD3AE4C111FBBD317DDB574 /* FirebaseCore */; };
 		34BF0BA147829B4647E5EA62 /* CoreModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75FB710A7782AFFD7136FAE9 /* CoreModelTests.swift */; };
 		3D3505032C85A03DED0F26E3 /* IncomingAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C97C57CE8E1E073E67FFFEF /* IncomingAlertView.swift */; };
 		450D8DA828804758628C4F58 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC6AE9DEB867BC8367F86B9D /* NotificationService.swift */; };
+		5FA1134C56D227BB7DC674C0 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 64193EFA51630BF2A6B6F871 /* FirebaseMessaging */; };
 		6B4C921AFF73235A53006ECD /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99FD01A2424F12E20249B9E6 /* KeychainStore.swift */; };
 		74E8AC4410DFA2ADC0343016 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B439FBFFBE35FCB0314D1D7F /* AppConfiguration.swift */; };
 		7955078FEF94BE17B912DF19 /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C0AF181FB348B52BE2F60D /* DeepLink.swift */; };
@@ -126,7 +127,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2BC2FE62CFC257E165294BDD /* FirebaseMessaging in Frameworks */,
+				2BC2FE62CFC257E165294BDD /* FirebaseCore in Frameworks */,
+				5FA1134C56D227BB7DC674C0 /* FirebaseMessaging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -297,6 +299,7 @@
 			);
 			name = Ariel;
 			packageProductDependencies = (
+				6CD3AE4C111FBBD317DDB574 /* FirebaseCore */,
 				64193EFA51630BF2A6B6F871 /* FirebaseMessaging */,
 			);
 			productName = Ariel;
@@ -825,6 +828,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = DB74D0920DEACB3DBBA8070E /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseMessaging;
+		};
+		6CD3AE4C111FBBD317DDB574 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DB74D0920DEACB3DBBA8070E /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

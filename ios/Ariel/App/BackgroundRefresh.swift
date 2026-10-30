@@ -11,7 +11,7 @@ enum BackgroundRefresh {
 
     @MainActor
     static func register() {
-        BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: nil) { task in
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: .main) { task in
             guard let refresh = task as? BGAppRefreshTask else {
                 task.setTaskCompleted(success: false)
                 return

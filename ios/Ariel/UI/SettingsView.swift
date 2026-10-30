@@ -89,6 +89,9 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .onAppear { relayText = model.relayURLOverride }
+            .onChange(of: model.incomingAlert?.id) { _, id in
+                if id != nil { confirmingReset = false }
+            }
             .confirmationDialog("Reset all buddy links?", isPresented: $confirmingReset, titleVisibility: .visible) {
                 Button("Reset links", role: .destructive) { model.clearPool() }
             } message: {

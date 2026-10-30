@@ -7,6 +7,21 @@ struct PanicView: View {
     var body: some View {
         @Bindable var model = model
         VStack(spacing: 0) {
+            if let pending = model.acknowledgmentFailed {
+                Button {
+                    Task { await model.retryAcknowledgment() }
+                } label: {
+                    Label("Could not tell \(pending.displayName) you are coming. Tap to try again.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(12)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.arielRedDark, in: RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 8)
+            }
             if let name = model.acknowledgedBy {
                 AcknowledgmentBanner(name: name)
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -38,6 +53,10 @@ struct PanicView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.arielSurface)
         .animation(.default, value: model.acknowledgedBy)
+        // The incoming alert covers everything; it cannot while a sheet is up.
+        .onChange(of: model.incomingAlert?.id) { _, id in
+            if id != nil { showingBuddies = false }
+        }
         .sheet(isPresented: $showingBuddies) {
             OnlineBuddiesSheet()
                 .environment(model)
