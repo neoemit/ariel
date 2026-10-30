@@ -1,0 +1,14 @@
+// Copy this file to Local.xcconfig (same folder) and fill it in.
+// Local.xcconfig is gitignored, so your team id never ends up in the repository.
+
+// Required for running on a device: your Apple Developer Team ID.
+DEVELOPMENT_TEAM = ABCDE12345
+
+// Free "Personal Team" (no paid Apple Developer Program)? It cannot sign Push Notifications, so
+// build with in-app alerts instead. scripts/ios-sideload.sh does this by itself.
+// ARIEL_PUSH_ENABLED = NO
+// ARIEL_APP_ENTITLEMENTS = Config/PersonalTeam.entitlements
+
+// Optional: a bundle id you own, if the default is taken by another team. It changes the
+// widget's id with it, and must match the iOS app registered in Firebase.
+// APP_BUNDLE_ID = com.yourname.ariel

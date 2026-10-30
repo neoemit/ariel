@@ -42,3 +42,11 @@ backend/secrets/
 # OS files
 .DS_Store
 Thumbs.db
+
+# iOS
+ios/build/
+ios/Config/Local.xcconfig
+ios/Ariel/Resources/GoogleService-Info.plist
+xcuserdata/
+*.xcuserstate
+DerivedData/

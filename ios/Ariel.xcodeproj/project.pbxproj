@@ -1,0 +1,832 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		06A316A77D7974DEA10F6ED8 /* RelayEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 996D3C3BEB0F430CEFEE4151 /* RelayEvent.swift */; };
+		1C25EEAF543D292DDE20628B /* BackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F31431B1F4D89A7298D214A /* BackgroundRefresh.swift */; };
+		20F86CBAE41B14C933B34305 /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C0AF181FB348B52BE2F60D /* DeepLink.swift */; };
+		22DC60688AD07367F605F60E /* QRCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF41E8192B4BDB2BC2F13BD7 /* QRCodeView.swift */; };
+		2865F6EA29D70572AD4B6FD3 /* PanicWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B66A6EEAFB3BC79148F1973 /* PanicWidget.swift */; };
+		296047242066B93BB64AF670 /* PresenceTrackerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 234D11A36927A476480A1DD2 /* PresenceTrackerTests.swift */; };
+		2BC2FE62CFC257E165294BDD /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 64193EFA51630BF2A6B6F871 /* FirebaseMessaging */; };
+		34BF0BA147829B4647E5EA62 /* CoreModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75FB710A7782AFFD7136FAE9 /* CoreModelTests.swift */; };
+		3D3505032C85A03DED0F26E3 /* IncomingAlertView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C97C57CE8E1E073E67FFFEF /* IncomingAlertView.swift */; };
+		450D8DA828804758628C4F58 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC6AE9DEB867BC8367F86B9D /* NotificationService.swift */; };
+		6B4C921AFF73235A53006ECD /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99FD01A2424F12E20249B9E6 /* KeychainStore.swift */; };
+		74E8AC4410DFA2ADC0343016 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B439FBFFBE35FCB0314D1D7F /* AppConfiguration.swift */; };
+		7955078FEF94BE17B912DF19 /* DeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5C0AF181FB348B52BE2F60D /* DeepLink.swift */; };
+		7E6D5B27370A07B24F17D79B /* AlertPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2264E619A3AEFD6B4BC0FD7 /* AlertPlayer.swift */; };
+		83C32B593864E4DB8082103D /* ArielModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FB0D7BD0E3173DDF6CC13A /* ArielModel.swift */; };
+		878825DE915512D8BB86A6F1 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1867115290FD4755641046C9 /* SettingsView.swift */; };
+		90D7F5B700C29B966B8D423F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E944E4806E8A4C3860A6AB5 /* AppDelegate.swift */; };
+		944EA99FEEA2F958917FB288 /* PushManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B46A2C27BE7272361BE8DF1C /* PushManager.swift */; };
+		ABD7ECE7363AAE305A2A43D5 /* ArielWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F3C41A343EBB7313F32EC2AF /* ArielWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AEF26DCC054A2F64FDE19835 /* RelayURL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00916875BF15EA52783FDAC1 /* RelayURL.swift */; };
+		AF52B3B4771057AAC313D65E /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FA52971BB2070A2589E6ADA /* RootView.swift */; };
+		B0EEEB5735F31DFBE435B7FA /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55A507063E72B7D5EC50EFDA /* Theme.swift */; };
+		B2DEBF582F5CE9468FAC68B8 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94CA65A19828827686227B0B /* PairingView.swift */; };
+		C37DEAF081A710CF31FC6398 /* PresenceTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CC31529A66B7EBCCF009469 /* PresenceTracker.swift */; };
+		C6C95A090A2FB7D0FA6643E4 /* RelayClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979AD219880444AEEA85A692 /* RelayClientTests.swift */; };
+		D37BF6B9DD9F2BAA6EFEDAA9 /* Escalation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25CA6A4B89E66766020ED40B /* Escalation.swift */; };
+		D7130E0F4CBBB679E55573F5 /* PanicView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78559AA05E584106FAA44B77 /* PanicView.swift */; };
+		D9ADE485D44FC8734E119059 /* ArielApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 366BF79B66E6AEEA16D68E36 /* ArielApp.swift */; };
+		DF6B7E8EACD131E33A0515FD /* RelayClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37127AE52C1D405F4ECB7569 /* RelayClient.swift */; };
+		E2C4F00A1AB2D6A295CD5F76 /* siren.wav in Resources */ = {isa = PBXBuildFile; fileRef = BA5A8907F6DD94C555A73081 /* siren.wav */; };
+		E3294371E77DA188BDA3915A /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C3450DD06026E4615C6D503 /* Preferences.swift */; };
+		E5CED19909B1E0D2C0B7AA40 /* BuddyID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27FBD34D3DBCDA90A0CA0652 /* BuddyID.swift */; };
+		E8A9C09F102688E8F25AB154 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8436A01C425F300BC851C33F /* Assets.xcassets */; };
+		F67D3C1738F22B09A91C4F21 /* PanicIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A68C1BE84CAADE5C96523EB /* PanicIntents.swift */; };
+		FBE833B100740B4D56C58466 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5018622134CBDDCC330B35 /* QRScannerView.swift */; };
+		FDA02A699E1D133A013E0B09 /* EventLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2613F3F2614F7962D6F5A67E /* EventLog.swift */; };
+		FFBAE672DF9057AB3B825FFB /* PanicButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = E089774863531AF89B266367 /* PanicButton.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		4C8B78B011AC7FD42AE7BE5A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6427E6009E18F9688431E2C7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 563BDBEF6E855008E360E4AD;
+			remoteInfo = Ariel;
+		};
+		8B7AB57EE3BC2B63C42DC664 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6427E6009E18F9688431E2C7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 84C8A0A6F779AF0260183A24;
+			remoteInfo = ArielWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		27E67ED0584B0A3B3BB47999 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				ABD7ECE7363AAE305A2A43D5 /* ArielWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		00916875BF15EA52783FDAC1 /* RelayURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayURL.swift; sourceTree = "<group>"; };
+		0A68C1BE84CAADE5C96523EB /* PanicIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanicIntents.swift; sourceTree = "<group>"; };
+		1867115290FD4755641046C9 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		1B66A6EEAFB3BC79148F1973 /* PanicWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanicWidget.swift; sourceTree = "<group>"; };
+		1F1E730E905879B121C8D916 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		20BFA78F6950E367E0E3FAC1 /* ArielTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ArielTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		234D11A36927A476480A1DD2 /* PresenceTrackerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenceTrackerTests.swift; sourceTree = "<group>"; };
+		25CA6A4B89E66766020ED40B /* Escalation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Escalation.swift; sourceTree = "<group>"; };
+		2613F3F2614F7962D6F5A67E /* EventLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventLog.swift; sourceTree = "<group>"; };
+		27FBD34D3DBCDA90A0CA0652 /* BuddyID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuddyID.swift; sourceTree = "<group>"; };
+		2C97C57CE8E1E073E67FFFEF /* IncomingAlertView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingAlertView.swift; sourceTree = "<group>"; };
+		2CC31529A66B7EBCCF009469 /* PresenceTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresenceTracker.swift; sourceTree = "<group>"; };
+		366BF79B66E6AEEA16D68E36 /* ArielApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArielApp.swift; sourceTree = "<group>"; };
+		37127AE52C1D405F4ECB7569 /* RelayClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayClient.swift; sourceTree = "<group>"; };
+		547822E013081851D7B2BFB1 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		55A507063E72B7D5EC50EFDA /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		6F31431B1F4D89A7298D214A /* BackgroundRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundRefresh.swift; sourceTree = "<group>"; };
+		75FB710A7782AFFD7136FAE9 /* CoreModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreModelTests.swift; sourceTree = "<group>"; };
+		78559AA05E584106FAA44B77 /* PanicView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanicView.swift; sourceTree = "<group>"; };
+		8436A01C425F300BC851C33F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		8FA52971BB2070A2589E6ADA /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		94CA65A19828827686227B0B /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
+		979AD219880444AEEA85A692 /* RelayClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayClientTests.swift; sourceTree = "<group>"; };
+		996D3C3BEB0F430CEFEE4151 /* RelayEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayEvent.swift; sourceTree = "<group>"; };
+		99FD01A2424F12E20249B9E6 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		9C3450DD06026E4615C6D503 /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
+		9E944E4806E8A4C3860A6AB5 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		B439FBFFBE35FCB0314D1D7F /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
+		B46A2C27BE7272361BE8DF1C /* PushManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushManager.swift; sourceTree = "<group>"; };
+		B9FB0D7BD0E3173DDF6CC13A /* ArielModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArielModel.swift; sourceTree = "<group>"; };
+		BA5A8907F6DD94C555A73081 /* siren.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = siren.wav; sourceTree = "<group>"; };
+		C5C0AF181FB348B52BE2F60D /* DeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLink.swift; sourceTree = "<group>"; };
+		C5C1EB6528847A1F057AF267 /* Ariel.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Ariel.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D09FF264940F96E4D9D45092 /* Ariel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Ariel.entitlements; sourceTree = "<group>"; };
+		DE5018622134CBDDCC330B35 /* QRScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerView.swift; sourceTree = "<group>"; };
+		DF41E8192B4BDB2BC2F13BD7 /* QRCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeView.swift; sourceTree = "<group>"; };
+		E089774863531AF89B266367 /* PanicButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanicButton.swift; sourceTree = "<group>"; };
+		E2264E619A3AEFD6B4BC0FD7 /* AlertPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertPlayer.swift; sourceTree = "<group>"; };
+		E231AEF1FBD2EFD1AAF20BBF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		EC6AE9DEB867BC8367F86B9D /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		F3C41A343EBB7313F32EC2AF /* ArielWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ArielWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		358C98DB8ADDDE775E26E9D4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2BC2FE62CFC257E165294BDD /* FirebaseMessaging in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0EE525BFC08823DE8FD4E4AC = {
+			isa = PBXGroup;
+			children = (
+				E30D8740EADCA4452ACDC22E /* Ariel */,
+				A083980D0F566D2D9AAC39B9 /* ArielTests */,
+				584F92F378355A8446CBE6E5 /* ArielWidget */,
+				8139C02A04A3F62419E2FA11 /* Config */,
+				2B9107326DC9BDFE8F80DFE0 /* Shared */,
+				B098DEEAF319D5DBCDB1EF52 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		2B9107326DC9BDFE8F80DFE0 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				C5C0AF181FB348B52BE2F60D /* DeepLink.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		44064BE89B22F27A512B9F8A /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				2C97C57CE8E1E073E67FFFEF /* IncomingAlertView.swift */,
+				94CA65A19828827686227B0B /* PairingView.swift */,
+				E089774863531AF89B266367 /* PanicButton.swift */,
+				78559AA05E584106FAA44B77 /* PanicView.swift */,
+				DF41E8192B4BDB2BC2F13BD7 /* QRCodeView.swift */,
+				DE5018622134CBDDCC330B35 /* QRScannerView.swift */,
+				8FA52971BB2070A2589E6ADA /* RootView.swift */,
+				1867115290FD4755641046C9 /* SettingsView.swift */,
+				55A507063E72B7D5EC50EFDA /* Theme.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		5772D9051379C252E95A2286 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				E2264E619A3AEFD6B4BC0FD7 /* AlertPlayer.swift */,
+				B9FB0D7BD0E3173DDF6CC13A /* ArielModel.swift */,
+				99FD01A2424F12E20249B9E6 /* KeychainStore.swift */,
+				EC6AE9DEB867BC8367F86B9D /* NotificationService.swift */,
+				B46A2C27BE7272361BE8DF1C /* PushManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		584F92F378355A8446CBE6E5 /* ArielWidget */ = {
+			isa = PBXGroup;
+			children = (
+				1F1E730E905879B121C8D916 /* Info.plist */,
+				1B66A6EEAFB3BC79148F1973 /* PanicWidget.swift */,
+			);
+			path = ArielWidget;
+			sourceTree = "<group>";
+		};
+		63A25780C91F21A319E09652 /* Intents */ = {
+			isa = PBXGroup;
+			children = (
+				0A68C1BE84CAADE5C96523EB /* PanicIntents.swift */,
+			);
+			path = Intents;
+			sourceTree = "<group>";
+		};
+		720D66CC0933C10B65B46D3A /* App */ = {
+			isa = PBXGroup;
+			children = (
+				9E944E4806E8A4C3860A6AB5 /* AppDelegate.swift */,
+				366BF79B66E6AEEA16D68E36 /* ArielApp.swift */,
+				6F31431B1F4D89A7298D214A /* BackgroundRefresh.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		8139C02A04A3F62419E2FA11 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				547822E013081851D7B2BFB1 /* Base.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		A083980D0F566D2D9AAC39B9 /* ArielTests */ = {
+			isa = PBXGroup;
+			children = (
+				75FB710A7782AFFD7136FAE9 /* CoreModelTests.swift */,
+				234D11A36927A476480A1DD2 /* PresenceTrackerTests.swift */,
+				979AD219880444AEEA85A692 /* RelayClientTests.swift */,
+			);
+			path = ArielTests;
+			sourceTree = "<group>";
+		};
+		B098DEEAF319D5DBCDB1EF52 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C5C1EB6528847A1F057AF267 /* Ariel.app */,
+				20BFA78F6950E367E0E3FAC1 /* ArielTests.xctest */,
+				F3C41A343EBB7313F32EC2AF /* ArielWidget.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B4A851D6867041516A609D29 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				D09FF264940F96E4D9D45092 /* Ariel.entitlements */,
+				8436A01C425F300BC851C33F /* Assets.xcassets */,
+				E231AEF1FBD2EFD1AAF20BBF /* Info.plist */,
+				BA5A8907F6DD94C555A73081 /* siren.wav */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		DC290E0050D057DD61B13C39 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				B439FBFFBE35FCB0314D1D7F /* AppConfiguration.swift */,
+				27FBD34D3DBCDA90A0CA0652 /* BuddyID.swift */,
+				25CA6A4B89E66766020ED40B /* Escalation.swift */,
+				2613F3F2614F7962D6F5A67E /* EventLog.swift */,
+				9C3450DD06026E4615C6D503 /* Preferences.swift */,
+				2CC31529A66B7EBCCF009469 /* PresenceTracker.swift */,
+				37127AE52C1D405F4ECB7569 /* RelayClient.swift */,
+				996D3C3BEB0F430CEFEE4151 /* RelayEvent.swift */,
+				00916875BF15EA52783FDAC1 /* RelayURL.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		E30D8740EADCA4452ACDC22E /* Ariel */ = {
+			isa = PBXGroup;
+			children = (
+				720D66CC0933C10B65B46D3A /* App */,
+				DC290E0050D057DD61B13C39 /* Core */,
+				63A25780C91F21A319E09652 /* Intents */,
+				B4A851D6867041516A609D29 /* Resources */,
+				5772D9051379C252E95A2286 /* Services */,
+				44064BE89B22F27A512B9F8A /* UI */,
+			);
+			path = Ariel;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		563BDBEF6E855008E360E4AD /* Ariel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5098D6D7DD1EC0037A14F650 /* Build configuration list for PBXNativeTarget "Ariel" */;
+			buildPhases = (
+				EC730B2C6292E2BBE4999AF2 /* Sources */,
+				47B5D66900550CA0AA38EA28 /* Resources */,
+				358C98DB8ADDDE775E26E9D4 /* Frameworks */,
+				27E67ED0584B0A3B3BB47999 /* Embed Foundation Extensions */,
+				7F178F5FC4028857F07D66CE /* Bundle GoogleService-Info.plist */,
+				2F13E87C7D13A77A03777D0C /* Stamp version */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				79F0F6E99442FC52394439CD /* PBXTargetDependency */,
+			);
+			name = Ariel;
+			packageProductDependencies = (
+				64193EFA51630BF2A6B6F871 /* FirebaseMessaging */,
+			);
+			productName = Ariel;
+			productReference = C5C1EB6528847A1F057AF267 /* Ariel.app */;
+			productType = "com.apple.product-type.application";
+		};
+		84C8A0A6F779AF0260183A24 /* ArielWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EA2EFBA68210D0952887D10E /* Build configuration list for PBXNativeTarget "ArielWidget" */;
+			buildPhases = (
+				8FA74ED7736F49B687101B62 /* Sources */,
+				323C20745B220E3FF107B655 /* Stamp version */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ArielWidget;
+			packageProductDependencies = (
+			);
+			productName = ArielWidget;
+			productReference = F3C41A343EBB7313F32EC2AF /* ArielWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		E3DD1F93E81743CA1911B052 /* ArielTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 48447780A1A01A339CFBBDD6 /* Build configuration list for PBXNativeTarget "ArielTests" */;
+			buildPhases = (
+				CB8AFC94B200DCF394FD299C /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7E3752D5E9092C2E069C678E /* PBXTargetDependency */,
+			);
+			name = ArielTests;
+			packageProductDependencies = (
+			);
+			productName = ArielTests;
+			productReference = 20BFA78F6950E367E0E3FAC1 /* ArielTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		6427E6009E18F9688431E2C7 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					563BDBEF6E855008E360E4AD = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					84C8A0A6F779AF0260183A24 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					E3DD1F93E81743CA1911B052 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = E3BD04E0E000E1A84F7A6191 /* Build configuration list for PBXProject "Ariel" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 0EE525BFC08823DE8FD4E4AC;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				DB74D0920DEACB3DBBA8070E /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = B098DEEAF319D5DBCDB1EF52 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				563BDBEF6E855008E360E4AD /* Ariel */,
+				84C8A0A6F779AF0260183A24 /* ArielWidget */,
+				E3DD1F93E81743CA1911B052 /* ArielTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		47B5D66900550CA0AA38EA28 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E8A9C09F102688E8F25AB154 /* Assets.xcassets in Resources */,
+				E2C4F00A1AB2D6A295CD5F76 /* siren.wav in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		2F13E87C7D13A77A03777D0C /* Stamp version */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Stamp version";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/Config/stamp-version.sh\"\n";
+		};
+		323C20745B220E3FF107B655 /* Stamp version */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Stamp version";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/Config/stamp-version.sh\"\n";
+		};
+		7F178F5FC4028857F07D66CE /* Bundle GoogleService-Info.plist */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Bundle GoogleService-Info.plist";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "SRC=\"${SRCROOT}/Ariel/Resources/GoogleService-Info.plist\"\nDEST=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleService-Info.plist\"\nif [ -f \"$SRC\" ]; then\n  cp \"$SRC\" \"$DEST\"\n  echo \"Bundled GoogleService-Info.plist\"\nelse\n  rm -f \"$DEST\"\n  if [ \"${ARIEL_PUSH_ENABLED}\" = \"YES\" ]; then\n    echo \"warning: Ariel/Resources/GoogleService-Info.plist not found - this build has no push: alerts arrive while the app is open (see docs/ios.md)\"\n  fi\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8FA74ED7736F49B687101B62 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				20F86CBAE41B14C933B34305 /* DeepLink.swift in Sources */,
+				2865F6EA29D70572AD4B6FD3 /* PanicWidget.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CB8AFC94B200DCF394FD299C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				34BF0BA147829B4647E5EA62 /* CoreModelTests.swift in Sources */,
+				296047242066B93BB64AF670 /* PresenceTrackerTests.swift in Sources */,
+				C6C95A090A2FB7D0FA6643E4 /* RelayClientTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EC730B2C6292E2BBE4999AF2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7E6D5B27370A07B24F17D79B /* AlertPlayer.swift in Sources */,
+				74E8AC4410DFA2ADC0343016 /* AppConfiguration.swift in Sources */,
+				90D7F5B700C29B966B8D423F /* AppDelegate.swift in Sources */,
+				D9ADE485D44FC8734E119059 /* ArielApp.swift in Sources */,
+				83C32B593864E4DB8082103D /* ArielModel.swift in Sources */,
+				1C25EEAF543D292DDE20628B /* BackgroundRefresh.swift in Sources */,
+				E5CED19909B1E0D2C0B7AA40 /* BuddyID.swift in Sources */,
+				7955078FEF94BE17B912DF19 /* DeepLink.swift in Sources */,
+				D37BF6B9DD9F2BAA6EFEDAA9 /* Escalation.swift in Sources */,
+				FDA02A699E1D133A013E0B09 /* EventLog.swift in Sources */,
+				3D3505032C85A03DED0F26E3 /* IncomingAlertView.swift in Sources */,
+				6B4C921AFF73235A53006ECD /* KeychainStore.swift in Sources */,
+				450D8DA828804758628C4F58 /* NotificationService.swift in Sources */,
+				B2DEBF582F5CE9468FAC68B8 /* PairingView.swift in Sources */,
+				FFBAE672DF9057AB3B825FFB /* PanicButton.swift in Sources */,
+				F67D3C1738F22B09A91C4F21 /* PanicIntents.swift in Sources */,
+				D7130E0F4CBBB679E55573F5 /* PanicView.swift in Sources */,
+				E3294371E77DA188BDA3915A /* Preferences.swift in Sources */,
+				C37DEAF081A710CF31FC6398 /* PresenceTracker.swift in Sources */,
+				944EA99FEEA2F958917FB288 /* PushManager.swift in Sources */,
+				22DC60688AD07367F605F60E /* QRCodeView.swift in Sources */,
+				FBE833B100740B4D56C58466 /* QRScannerView.swift in Sources */,
+				DF6B7E8EACD131E33A0515FD /* RelayClient.swift in Sources */,
+				06A316A77D7974DEA10F6ED8 /* RelayEvent.swift in Sources */,
+				AEF26DCC054A2F64FDE19835 /* RelayURL.swift in Sources */,
+				AF52B3B4771057AAC313D65E /* RootView.swift in Sources */,
+				878825DE915512D8BB86A6F1 /* SettingsView.swift in Sources */,
+				B0EEEB5735F31DFBE435B7FA /* Theme.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		79F0F6E99442FC52394439CD /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 84C8A0A6F779AF0260183A24 /* ArielWidget */;
+			targetProxy = 8B7AB57EE3BC2B63C42DC664 /* PBXContainerItemProxy */;
+		};
+		7E3752D5E9092C2E069C678E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 563BDBEF6E855008E360E4AD /* Ariel */;
+			targetProxy = 4C8B78B011AC7FD42AE7BE5A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		038F52F77BDFC4A87B809B73 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_ID).tests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Ariel.app/Ariel";
+			};
+			name = Debug;
+		};
+		25922DEFEA573DE3058D9085 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 547822E013081851D7B2BFB1 /* Base.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		29DD8697D9EF8E3CB27CF80A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "$(ARIEL_APP_ENTITLEMENTS)";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				INFOPLIST_FILE = Ariel/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_LDFLAGS = "-ObjC";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_ID)";
+				PRODUCT_NAME = Ariel;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		31D7ACF53524BBE700E37073 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_ID).tests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Ariel.app/Ariel";
+			};
+			name = Release;
+		};
+		34E1CAEC87DD560CE7F930A6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 547822E013081851D7B2BFB1 /* Base.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		3C66C7812605315C29EB0979 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				INFOPLIST_FILE = ArielWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_ID).widget";
+				PRODUCT_NAME = ArielWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		645D440CF3FFCCECF5FA4733 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				INFOPLIST_FILE = ArielWidget/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_ID).widget";
+				PRODUCT_NAME = ArielWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D37B70DB2771561BC7BD53FA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "$(ARIEL_APP_ENTITLEMENTS)";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				INFOPLIST_FILE = Ariel/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_LDFLAGS = "-ObjC";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_ID)";
+				PRODUCT_NAME = Ariel;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		48447780A1A01A339CFBBDD6 /* Build configuration list for PBXNativeTarget "ArielTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				038F52F77BDFC4A87B809B73 /* Debug */,
+				31D7ACF53524BBE700E37073 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5098D6D7DD1EC0037A14F650 /* Build configuration list for PBXNativeTarget "Ariel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				29DD8697D9EF8E3CB27CF80A /* Debug */,
+				D37B70DB2771561BC7BD53FA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E3BD04E0E000E1A84F7A6191 /* Build configuration list for PBXProject "Ariel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				25922DEFEA573DE3058D9085 /* Debug */,
+				34E1CAEC87DD560CE7F930A6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		EA2EFBA68210D0952887D10E /* Build configuration list for PBXNativeTarget "ArielWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				645D440CF3FFCCECF5FA4733 /* Debug */,
+				3C66C7812605315C29EB0979 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		DB74D0920DEACB3DBBA8070E /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.19.2;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		64193EFA51630BF2A6B6F871 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DB74D0920DEACB3DBBA8070E /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 6427E6009E18F9688431E2C7 /* Project object */;
+}
