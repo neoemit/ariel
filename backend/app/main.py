@@ -148,9 +148,11 @@ def initialize_database() -> None:
 
 
 def initialize_firebase() -> bool:
-    if not os.path.exists(FIREBASE_CREDENTIALS_PATH):
+    # Docker creates an empty directory when the bind-mounted file is missing on the host.
+    if not os.path.isfile(FIREBASE_CREDENTIALS_PATH):
         LOGGER.warning(
-            "Firebase credentials not found at %s; push delivery disabled",
+            "Firebase credentials not found at %s; push delivery disabled: Android buddies only get "
+            "panics over Nearby",
             FIREBASE_CREDENTIALS_PATH,
         )
         return False
@@ -353,6 +355,16 @@ def get_ntfy_topics(buddy_ids: Sequence[str]) -> List[str]:
     with get_connection() as conn:
         rows = conn.execute(sql, tuple(buddy_ids)).fetchall()
     return [str(row["topic"]) for row in rows]
+
+
+def get_buddies_with_ntfy_topics(buddy_ids: Sequence[str]) -> set[str]:
+    if not buddy_ids:
+        return set()
+    placeholders = ",".join("?" for _ in buddy_ids)
+    sql = f"SELECT DISTINCT buddy_id FROM ntfy_topics WHERE buddy_id IN ({placeholders})"
+    with get_connection() as conn:
+        rows = conn.execute(sql, tuple(buddy_ids)).fetchall()
+    return {str(row["buddy_id"]) for row in rows}
 
 
 def claim_ntfy_delivery(delivery_key: str, topic: str) -> bool:
@@ -593,7 +605,7 @@ def require_ntfy() -> None:
 
 
 @app.post("/v1/panic")
-def send_panic(request: PanicRequest) -> Dict[str, int | str]:
+def send_panic(request: PanicRequest) -> Dict[str, object]:
     recipients = sorted({buddy_id for buddy_id in request.recipientIds if buddy_id and buddy_id != request.senderId})
     if not recipients:
         return {
@@ -602,6 +614,7 @@ def send_panic(request: PanicRequest) -> Dict[str, int | str]:
             "deliveredTokens": 0,
             "recipientCount": 0,
             "ntfyTopics": 0,
+            "unreachedRecipientIds": [],
         }
 
     payload = {
@@ -612,30 +625,40 @@ def send_panic(request: PanicRequest) -> Dict[str, int | str]:
     }
     store_events(recipients, payload)
     ntfy_topics = notify_ntfy(recipients, payload)
-    if not is_firebase_ready():
-        return {
-            "status": "queued",
-            "attemptedTokens": 0,
-            "deliveredTokens": 0,
-            "recipientCount": len(recipients),
-            "ntfyTopics": ntfy_topics,
-        }
+    firebase_ready = is_firebase_ready()
 
-    tokens_by_buddy = get_tokens_for_buddies(recipients)
     attempted = 0
     delivered = 0
-    for buddy_id in recipients:
-        for token in tokens_by_buddy.get(buddy_id, []):
-            attempted += 1
-            if send_data_message(token, payload):
-                delivered += 1
+    pushed: set[str] = set()
+    if firebase_ready:
+        tokens_by_buddy = get_tokens_for_buddies(recipients)
+        for buddy_id in recipients:
+            for token in tokens_by_buddy.get(buddy_id, []):
+                attempted += 1
+                if send_data_message(token, payload):
+                    delivered += 1
+                    pushed.add(buddy_id)
+
+    # Nothing alerts these buddies: they only see the panic if they happen to read the inbox (an open
+    # iOS app without push). Android buddies never do. The sender is told, so they do not count on them.
+    reached = pushed | get_buddies_with_ntfy_topics(recipients)
+    unreached = [buddy_id for buddy_id in recipients if buddy_id not in reached]
+    if unreached:
+        LOGGER.warning(
+            "event=panic_unreached eventId=%s senderId=%s unreached=%s firebaseReady=%s",
+            request.eventId,
+            request.senderId,
+            ",".join(unreached),
+            firebase_ready,
+        )
 
     return {
-        "status": "sent",
+        "status": "sent" if firebase_ready else "queued",
         "attemptedTokens": attempted,
         "deliveredTokens": delivered,
         "recipientCount": len(recipients),
         "ntfyTopics": ntfy_topics,
+        "unreachedRecipientIds": unreached,
     }
 
 

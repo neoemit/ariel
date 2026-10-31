@@ -33,6 +33,7 @@ struct SendPanicIntent: AppIntent {
         let dialog: IntentDialog = switch await ArielModel.shared.sendQuickPanic(Escalation(wireValue: escalation.rawValue)) {
         case .noBuddies: "Your panic pool is empty. Add buddies in Ariel first."
         case .failed: "The relay could not be reached, so your buddies may not know. Try again in Ariel."
+        case .undelivered: "The relay could not alert some of your buddies, so they may not know. Try again in Ariel."
         case .idle, .sending: "Your panic alert is on its way."
         case .sent: "Panic alert sent to your buddies."
         }
