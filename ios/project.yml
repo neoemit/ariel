@@ -1,0 +1,119 @@
+# XcodeGen spec for the Ariel iOS app. Ariel.xcodeproj is generated from this file and committed,
+# so building only needs Xcode. After changing this file, or adding or removing source files, run:
+#
+#   cd ios && xcodegen generate
+#
+name: Ariel
+options:
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+  groupSortPosition: top
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: 12.19.2
+targets:
+  Ariel:
+    type: application
+    platform: iOS
+    sources:
+      - path: Ariel
+        excludes:
+          # Bundled by the script below, so the project never has to list it.
+          - Resources/GoogleService-Info.plist
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: Ariel
+        # The scripts below read files outside the target (an optional, gitignored plist, and the
+        # Android version).
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
+        INFOPLIST_FILE: Ariel/Resources/Info.plist
+        # Ariel.entitlements, or none for a free Personal Team (Config/Base.xcconfig).
+        CODE_SIGN_ENTITLEMENTS: $(ARIEL_APP_ENTITLEMENTS)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1,2"
+        OTHER_LDFLAGS: -ObjC
+    dependencies:
+      - target: ArielWidget
+        embed: true
+      - package: Firebase
+        product: FirebaseCore
+      - package: Firebase
+        product: FirebaseMessaging
+    postBuildScripts:
+      - name: Bundle GoogleService-Info.plist
+        basedOnDependencyAnalysis: false
+        script: |
+          SRC="${SRCROOT}/Ariel/Resources/GoogleService-Info.plist"
+          DEST="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleService-Info.plist"
+          if [ -f "$SRC" ]; then
+            cp "$SRC" "$DEST"
+            echo "Bundled GoogleService-Info.plist"
+          else
+            rm -f "$DEST"
+            if [ "${ARIEL_PUSH_ENABLED}" = "YES" ]; then
+              echo "warning: Ariel/Resources/GoogleService-Info.plist not found - this build has no push: alerts arrive while the app is open (see docs/ios.md)"
+            fi
+          fi
+      - name: Stamp version
+        basedOnDependencyAnalysis: false
+        script: |
+          "${SRCROOT}/Config/stamp-version.sh"
+  ArielWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ArielWidget
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_NAME: ArielWidget
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).widget
+        INFOPLIST_FILE: ArielWidget/Info.plist
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
+    postBuildScripts:
+      - name: Stamp version
+        basedOnDependencyAnalysis: false
+        script: |
+          "${SRCROOT}/Config/stamp-version.sh"
+  ArielTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ArielTests
+    dependencies:
+      - target: Ariel
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Ariel:
+    build:
+      targets:
+        Ariel: all
+        ArielTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - ArielTests
+    archive:
+      config: Release

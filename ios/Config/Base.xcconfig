@@ -1,0 +1,29 @@
+// Build settings shared by the Ariel app, its widget and its tests.
+//
+// Do not put your Apple team or a personal bundle id here: copy Local.xcconfig.example to
+// Local.xcconfig (gitignored) and override them there.
+
+// Bundle id of the app; the widget is $(APP_BUNDLE_ID).widget. The same id as the Android app.
+APP_BUNDLE_ID = com.thomaslamendola.ariel
+
+// Your Apple Developer Team ID (10 characters, Membership page of developer.apple.com).
+DEVELOPMENT_TEAM =
+
+CODE_SIGN_STYLE = Automatic
+
+// Push notifications (Firebase Cloud Messaging through APNs) need the paid Apple Developer
+// Program. A free Personal Team cannot sign the Push Notifications entitlement, so its builds
+// set ARIEL_PUSH_ENABLED = NO and use the empty Config/PersonalTeam.entitlements, as
+// scripts/ios-sideload.sh does: panics then reach the iPhone while Ariel is open (in-app alerts,
+// docs/ios.md). Leaving the entitlements setting empty does not work: Xcode then still asks for
+// Push Notifications.
+ARIEL_PUSH_ENABLED = YES
+ARIEL_APP_ENTITLEMENTS = Ariel/Resources/Ariel.entitlements
+
+// Placeholders: the "Stamp version" build phase sets the built app's version from
+// appVersionMinor in app/build.gradle.kts, so Android and iOS always share one (1.<minor>, build
+// <minor>).
+MARKETING_VERSION = 1.0
+CURRENT_PROJECT_VERSION = 1
+
+#include? "Local.xcconfig"

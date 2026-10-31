@@ -1,6 +1,6 @@
 # Ariel Panic Button App
 
-Ariel is an experimental Android app designed for emergency situations. It allows users to form a "Panic Pool" where any member can trigger a loud alarm on all other members' phones.
+Ariel is an experimental Android and iOS app designed for emergency situations. It allows users to form a "Panic Pool" where any member can trigger a loud alarm on all other members' phones.
 
 ## Features
 - **1.5-Second Panic**: Hold the panic button for 1.5 seconds to trigger.
@@ -9,6 +9,20 @@ Ariel is an experimental Android app designed for emergency situations. It allow
 - **Multi-Path Connectivity**: Uses Nearby (Bluetooth & WiFi) plus internet relay push notifications.
 - **Escalation Modes**: Generic, medical, and armed-response context payloads.
 - **Acknowledge**: Tapping the alert stops the sound and notifies the sender.
+
+## iPhone and iPad
+The iOS app is in [`ios/`](ios): same panic button, pairing and relay, with Android and iOS buddies
+alerting each other through the relay (Nearby is Android-only). Build it with Xcode, or sideload it
+onto your own devices with a free Apple ID:
+
+```bash
+scripts/ios-check-env.sh     # is this Mac ready?
+scripts/ios-sideload.sh      # build this checkout and install it on the iPhones/iPads you pick
+scripts/ios-renew.sh schedule  # keep free-team builds signed past their 7 days
+```
+
+Free-team builds have in-app alerts (the app polls the relay while it is open) instead of push.
+Everything else, including push setup, is in [docs/ios.md](docs/ios.md).
 
 ## Quick Start (Pre-requisites)
 1. **Android Studio**: Installed on your machine.
@@ -136,6 +150,9 @@ If you only have one real device, you can use the included Python script to simu
    python3 ariel-buddy.py monitor
    ```
    When you trigger a panic on your phone, the terminal will catch it and allow you to **Acknowledge (A)** or **Stop (S)**.
+5. **Through the relay (works with iPhones too)**: `python3 ariel-buddy.py relay-panic <your ID>` sends
+   a panic to a phone, and `python3 ariel-buddy.py relay-monitor` stays online as `VirtualBuddy_01` and
+   catches panics from phones that added it. Set `ARIEL_RELAY_URL` for your own relay.
 
 ## Permissions & Persistence
 - **Boot Start**: Ariel automatically starts monitoring when your phone boots up.
