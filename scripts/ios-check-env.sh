@@ -121,12 +121,12 @@ check_env() {
 	print "\nAlerts"
 	local plist=$ROOT/ios/Ariel/Resources/GoogleService-Info.plist
 	if $team_free; then
-		env_ok "Personal Team build: in-app alerts, without push. A buddy's panic reaches the iPhone"
-		env_note "while Ariel is open, and now and then through background refresh (docs/ios.md)."
+		env_ok "Personal Team build, without push. A buddy's panic reaches the iPhone through the ntfy"
+		env_note "app once it is set up (README), and while Ariel is open."
 	elif [[ -f $plist ]]; then
 		env_ok "push notifications through Firebase (GoogleService-Info.plist found)"
 	else
-		env_warn "no ios/Ariel/Resources/GoogleService-Info.plist, so no push: in-app alerts only (docs/ios.md › Push)"
+		env_warn "no ios/Ariel/Resources/GoogleService-Info.plist, so no push: ntfy (README) and in-app alerts only"
 	fi
 
 	print "\nRelay"
@@ -139,7 +139,14 @@ check_env() {
 			if [[ $(jq -r '.firebaseReady // false' <<<$health 2>/dev/null) == true ]]; then
 				env_ok "$url answers and can send pushes"
 			else
-				env_warn "$url answers, but has no Firebase credentials: pushes are off, in-app alerts still work"
+				env_warn "$url answers, but has no Firebase credentials: pushes are off, ntfy and in-app alerts still work"
+			fi
+			if [[ $(jq -r '.ntfyEnabled // false' <<<$health 2>/dev/null) == true ]]; then
+				env_ok "ntfy is enabled on the relay ($(jq -r '.ntfyServerUrl' <<<$health))"
+			elif $team_free; then
+				env_warn "ntfy is not enabled on the relay (NTFY_BASE_URL, README): this build only gets alerts while Ariel is open"
+			else
+				env_note "ntfy is not enabled on the relay (NTFY_BASE_URL, README)"
 			fi
 			if ! curl -fsS --max-time 10 -H 'Content-Type: application/json' \
 				-d '{"buddyId":"ios-check-env","afterId":0}' "$url/v1/events" >/dev/null 2>&1; then

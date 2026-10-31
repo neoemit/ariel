@@ -14,6 +14,7 @@ final class Preferences: @unchecked Sendable {
         static let acknowledgedEvents = "acknowledged_events"
         static let eventsCursor = "events_cursor"
         static let fcmToken = "fcm_token"
+        static let ntfyTopic = "ntfy_topic"
         static let onboarded = "onboarded"
     }
 
@@ -87,6 +88,12 @@ final class Preferences: @unchecked Sendable {
     var fcmToken: String? {
         get { defaults.string(forKey: Key.fcmToken) }
         set { defaults.set(newValue, forKey: Key.fcmToken) }
+    }
+
+    /// The ntfy topic the relay publishes this device's alerts to.
+    var ntfyTopic: String? {
+        get { defaults.string(forKey: Key.ntfyTopic) }
+        set { defaults.set(newValue, forKey: Key.ntfyTopic) }
     }
 
     /// Whether the first-launch permission screen was shown.

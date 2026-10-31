@@ -119,6 +119,55 @@ final class RelayURLTests: XCTestCase {
     }
 }
 
+final class NtfyTopicTests: XCTestCase {
+    func testAddsTheNamespaceTheRelayInsistsOn() {
+        XCTAssertEqual(NtfyTopic.normalize("alice"), "ariel_alice")
+        XCTAssertEqual(NtfyTopic.normalize(" ariel_alice-2 "), "ariel_alice-2")
+    }
+
+    func testRefusesWhatNtfyWouldNotTake() {
+        XCTAssertNil(NtfyTopic.normalize(""))
+        XCTAssertNil(NtfyTopic.normalize("ariel_"))
+        XCTAssertNil(NtfyTopic.normalize("has space"))
+        XCTAssertNil(NtfyTopic.normalize("a/b"))
+        XCTAssertNil(NtfyTopic.normalize("zoë"))
+        XCTAssertNil(NtfyTopic.normalize(String(repeating: "x", count: 59)))
+        XCTAssertNotNil(NtfyTopic.normalize(String(repeating: "x", count: 58)))
+    }
+
+    func testTestResultSaysWhatWentWrong() {
+        XCTAssertTrue(NtfyTestResult(delivered: true, upstream: "confirmed").summary.hasPrefix("Sent."))
+        XCTAssertTrue(NtfyTestResult(delivered: true, upstream: "unchecked").summary.hasPrefix("Sent."))
+        XCTAssertTrue(NtfyTestResult(delivered: true, upstream: "forwarded").summary.contains("upstream-base-url"))
+        XCTAssertTrue(NtfyTestResult(delivered: true, upstream: "failed").summary.contains("ntfy.sh"))
+        XCTAssertTrue(NtfyTestResult(delivered: false, upstream: "unchecked").summary.contains("NTFY_TOKEN"))
+    }
+}
+
+final class DeepLinkTests: XCTestCase {
+    private func link(_ string: String) -> DeepLink? {
+        DeepLink(url: URL(string: string)!)
+    }
+
+    func testPanic() {
+        XCTAssertEqual(link("ariel://panic"), .panic(escalationType: nil))
+        XCTAssertEqual(link("ariel://panic?type=MEDICAL"), .panic(escalationType: "MEDICAL"))
+    }
+
+    func testTheLinksOfNtfyNotifications() {
+        XCTAssertEqual(link("ariel://alert?event=e1"), .alert(eventId: "e1"))
+        XCTAssertEqual(link("ariel://alert?event=a%20b%26c"), .alert(eventId: "a b&c"))
+        XCTAssertEqual(link("ariel://home"), .home)
+    }
+
+    func testRefusesOtherLinks() {
+        XCTAssertNil(link("ariel://alert"))
+        XCTAssertNil(link("ariel://alert?event="))
+        XCTAssertNil(link("ariel://other"))
+        XCTAssertNil(link("https://panic"))
+    }
+}
+
 final class AppConfigurationTests: XCTestCase {
     func testPushNeedsBothTheBuildSettingAndFirebase() {
         var configuration = AppConfiguration(pushRequested: true, hasFirebaseConfig: true, version: "1.64", build: "64")

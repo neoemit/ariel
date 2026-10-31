@@ -61,7 +61,7 @@ note_install() {
 
 # Sets reply to the xcodebuild settings that sign for this team. A free Personal Team can sign
 # neither Push Notifications nor Time Sensitive notifications, so its builds have in-app alerts
-# instead (the app polls the relay while it is open), as do builds with --in-app.
+# instead (the app polls the relay while it is open) and ntfy (README), as do builds with --in-app.
 signing_settings() {
 	reply=(DEVELOPMENT_TEAM=$team APP_BUNDLE_ID=$bundle_id CODE_SIGN_STYLE=Automatic)
 	if $team_free || ${in_app:-false}; then

@@ -6,7 +6,7 @@ Ariel is an experimental Android and iOS app designed for emergency situations. 
 - **1.5-Second Panic**: Hold the panic button for 1.5 seconds to trigger.
 - **Home Widget**: One-tap immediate panic button.
 - **Loud Alarm**: Plays even if the phone is in Silent or Do Not Disturb (DND) mode.
-- **Multi-Path Connectivity**: Uses Nearby (Bluetooth & WiFi) plus internet relay push notifications.
+- **Multi-Path Connectivity**: Uses Nearby (Bluetooth & WiFi) plus internet relay push notifications, and [ntfy](#iphone-notifications-through-ntfy) on iPhones without push.
 - **Escalation Modes**: Generic, medical, and armed-response context payloads.
 - **Acknowledge**: Tapping the alert stops the sound and notifies the sender.
 
@@ -21,8 +21,166 @@ scripts/ios-sideload.sh      # build this checkout and install it on the iPhones
 scripts/ios-renew.sh schedule  # keep free-team builds signed past their 7 days
 ```
 
-Free-team builds have in-app alerts (the app polls the relay while it is open) instead of push.
+Free-team builds cannot have Ariel's own push: alerts reach them through the ntfy app, once it is
+[set up](#iphone-notifications-through-ntfy), and while Ariel is open (the app polls the relay).
 Everything else, including push setup, is in [docs/ios.md](docs/ios.md).
+
+## iPhone notifications through ntfy
+An iPhone only gets Ariel's own push from a build signed by a paid Apple Developer team. Without one,
+the relay publishes alerts to a self-hosted [ntfy](https://ntfy.sh) server and the free ntfy app shows
+them, with Ariel closed and the phone locked. It is the same setup as PTT's, and can share its ntfy
+server.
+
+A panic goes to every buddy in the sender's panic pool, and **all of them get the same notification**
+(the same title, text and priority), on the topic attached to their own buddy ID. Every device
+subscribed to a topic shows it, so one person's iPhone and iPad just subscribe to the same one. Android
+buddies need none of this: they keep getting Firebase pushes and Nearby, and their panics and
+acknowledgments reach iPhones through ntfy too.
+
+```
+Panic ──▶ Ariel relay ──JSON publish──▶ your ntfy server ──poll request──▶ ntfy.sh ──APNs──▶ iPhone
+                                               ▲                                               │
+                                               └───────── ntfy app fetches the message ────────┘
+```
+
+Apple only delivers push to the App Store ntfy app through ntfy.sh. Your server forwards it a *poll
+request*, which holds a message ID and a hash of the topic, never the alert's text, and the iPhone
+then fetches the notification from your server. This is ntfy's standard self-hosting setup for iOS.
+
+**What a panic does on the iPhone:**
+
+- The ntfy app shows *ARIEL PANIC ALERT 🚑: User_1234 requires medical assistance.* at ntfy's highest
+  priority. It names the buddy ID, as the relay does not know your nicknames for people.
+- **It is an ordinary notification sound, once, not Ariel's siren, and it stays quiet with the
+  Ring/Silent switch on silent.** ntfy's iOS app 1.7, the current one, marks it Time Sensitive. Its
+  release notes announce Critical Alerts for version 1.8, which would break through silent mode and
+  Do Not Disturb (ntfy app, step 5 below). Until then, don't rely on it to wake someone up.
+- Tapping it opens the alert in Ariel, for up to an hour after the panic. *I am coming!* there tells the
+  sender. Opening Ariel within 5 minutes of the panic, without tapping, also starts the siren.
+- The sender gets *Help is on the way!* the same way.
+
+### 1. ntfy server
+Already running ntfy for PTT? Keep it, and go on to *Users and access*.
+
+For iOS, the server has to be:
+
+- reachable from the phones over **HTTPS with a valid certificate** (behind Caddy, Traefik or nginx with
+  Let's Encrypt, for example),
+- configured with `base-url` set to that public URL, exactly as it will be typed in the ntfy app,
+- configured with `upstream-base-url: "https://ntfy.sh"`. **Without it, an iPhone only gets notifications
+  while the ntfy app is open.**
+
+An example `docker-compose.yml`. These `NTFY_*` variables configure the **ntfy** container, and are not
+the relay's variables in step 2:
+
+```yaml
+services:
+  ntfy:
+    image: binwiederhier/ntfy
+    container_name: ntfy
+    command: serve
+    environment:
+      NTFY_BASE_URL: "https://ntfy.example.com"
+      NTFY_UPSTREAM_BASE_URL: "https://ntfy.sh"
+      NTFY_CACHE_FILE: "/var/cache/ntfy/cache.db"
+      NTFY_AUTH_FILE: "/var/lib/ntfy/user.db"
+      NTFY_AUTH_DEFAULT_ACCESS: "deny-all"
+      NTFY_BEHIND_PROXY: "true"   # if behind a reverse proxy
+    volumes:
+      - ./ntfy/cache:/var/cache/ntfy
+      - ./ntfy/lib:/var/lib/ntfy
+    ports:
+      - "8090:80"
+    restart: unless-stopped
+```
+
+(Or the equivalent `server.yml` keys: `base-url`, `upstream-base-url`, `cache-file`, `auth-file`,
+`auth-default-access`, `behind-proxy`.)
+
+**Users and access.** One publisher for the relay, which can only write Ariel's topics, and its token:
+
+```bash
+docker exec -it ntfy ntfy user add ariel-publisher
+docker exec -it ntfy ntfy access ariel-publisher 'ariel_*' write-only
+docker exec -it ntfy ntfy token add ariel-publisher      # prints tk_...
+```
+
+One reader per person, used by the ntfy app on their devices, which can read that person's topic. If
+they already have one for PTT, only the `access` line is needed:
+
+```bash
+docker exec -it ntfy ntfy user add alice
+docker exec -it ntfy ntfy access alice 'ariel_alice*' read-only
+```
+
+Running ntfy without access control? Then the topic name is the only secret: let Ariel generate a random
+one in step 3, and treat it like a password.
+
+### 2. Ariel relay
+Add this to a `.env` next to the repository's `docker-compose.yml`, then run `docker compose up -d --build`:
+
+```env
+# How the relay's container reaches ntfy: the public URL, or an internal one (http://ntfy:80) if both
+# containers share a Docker network.
+NTFY_BASE_URL=https://ntfy.example.com
+# What phones subscribe to. Only needed when NTFY_BASE_URL is an internal URL.
+NTFY_PUBLIC_URL=https://ntfy.example.com
+# The ariel-publisher token from step 1 (or NTFY_USERNAME and NTFY_PASSWORD instead).
+NTFY_TOKEN=tk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+Check it with `curl https://<your relay>/health`, which should say `"ntfyEnabled": true`. ntfy needs no
+Firebase, so a relay for iPhones alone can do without the service account from
+[Internet Relay Backend](#internet-relay-backend-docker-compose). The optional settings are in
+[backend/README.md](backend/README.md#ntfy).
+
+### 3. Ariel app, on each iPhone
+1. Point it at your relay if it is not the default one: **Settings › Internet relay**. Then pair with your
+   buddies on the **Pairing** tab as usual: a panic goes to the buddies in the sender's pool.
+2. **Settings › ntfy** now shows the server. Type the name your reader can read, such as `alice`, which
+   becomes `ariel_alice`, and tap **Use this topic**. Or leave it empty and tap **Generate a topic**.
+3. **Server** and **Topic** can be copied by tapping them, for the next step.
+
+### 4. ntfy app, on each iPhone or iPad
+1. Install [ntfy](https://apps.apple.com/us/app/ntfy/id1625396347) from the App Store, and allow
+   notifications when it asks.
+2. With access control: **Settings › Users › Add user**, with `https://ntfy.example.com` and the reader's
+   username and password.
+3. Tap **+**, enter the topic, turn on **Use another server**, enter `https://ntfy.example.com` exactly as
+   in the server's `base-url`, and **Subscribe**.
+4. So that a Focus does not silence a panic: iOS **Settings › Focus ›** each one **› Apps**, add ntfy.
+5. Version 1.8 or newer of the ntfy app: turn on **Settings › Critical Alerts** and allow them, so that
+   panics break through silent mode and Do Not Disturb.
+6. Back in Ariel, **Settings › ntfy › Send test notification**. It is sent at a panic's priority, and it
+   should show on every subscribed device within seconds, with Ariel in the background.
+
+Everyone in the pool does steps 3 and 4 on their own phone. To try a real panic without a second phone:
+`python3 ariel-buddy.py relay-panic <your ID> MEDICAL`.
+
+### Good to know
+- **Keep the delivery check on.** The ntfy server sends each poll request once and never retries, and
+  one that fails is a notification the iPhone never shows. So the relay also listens on ntfy.sh, and sends
+  the poll request itself if the server's has not arrived after 15 seconds. It needs `NTFY_PUBLIC_URL` (or
+  `NTFY_BASE_URL`) to be exactly the ntfy server's `base-url`.
+- **Build with push?** A push build gets the siren from Ariel's own notifications and does not need ntfy.
+  With a topic as well, each alert shows twice.
+- **Reinstalling** keeps the topic, like the buddy ID. Changing relay moves it: Ariel tells the new relay.
+- **The relay has no accounts.** Whoever can reach it and knows a buddy ID can read that buddy's inbox and
+  attach a topic to it, and so see its panics. They cannot remove a topic without knowing its name, which
+  the relay never reveals, and the relay only publishes to `ariel_` topics. Put the relay behind a VPN if
+  that is not good enough for your pool.
+
+### Troubleshooting
+| Symptom | What to check |
+|---|---|
+| **Settings › ntfy** says *Not set up on this relay* | `NTFY_BASE_URL` is empty, or the relay is older than this: `docker compose up -d --build` and check `/health`. |
+| Test says *The ntfy server did not take it* | `docker compose logs ariel-relay`. `HTTP 401/403` means a wrong `NTFY_TOKEN`, or no write access to `ariel_*` (`ntfy access ariel-publisher`). |
+| Test says it was sent, but nothing shows | The reader cannot read the topic (`ntfy access alice`), the topic or server differs in the ntfy app, or ntfy's notifications are off. From the relay's host: `curl -H "Authorization: Bearer tk_..." -d hello https://ntfy.example.com/ariel_alice`. |
+| Test says *the relay did* wake iPhones, or notifications only come with the ntfy app open | `upstream-base-url` is missing on the ntfy server, or `base-url` differs from the URL in the app. |
+| A notification did not show, but it is in the ntfy app | `docker compose logs ariel-relay \| grep -i "poll request"`. *reached https://ntfy.sh*: the relay's side worked, so look at the phone's Focus and notification settings, and if it keeps happening, remove the subscription in the ntfy app and add it again. *the relay sent it instead*: `docker logs ntfy \| grep -i "poll request"` says why the server's failed. A `429` means more than 250 messages a day from your IP: `upstream-access-token` on the ntfy server and `NTFY_UPSTREAM_TOKEN` on the relay, from an ntfy.sh account, raise that. |
+| Tapping a notification does not open Ariel | Ariel has to be installed on that device. On one subscribed to the topic without it, such as a shared iPad, taps do nothing. |
+| Tapping opens Ariel but no alert shows | It was answered already, the panic is over an hour old, or this device's relay differs from the sender's. |
+| One buddy gets panics and another does not | Each person needs a topic attached in their own Ariel, and to be in the sender's pool on the **Pairing** tab. |
 
 ## Quick Start (Pre-requisites)
 1. **Android Studio**: Installed on your machine.
@@ -128,6 +286,7 @@ Android client Firebase setup (required for push token registration):
 Notes:
 - Nearby is still active as local fallback.
 - SMS transport is removed.
+- For iPhones without push, connect the relay to ntfy: [iPhone notifications through ntfy](#iphone-notifications-through-ntfy).
 
 ## Virtual Buddy CLI (Simulator)
 If you only have one real device, you can use the included Python script to simulate a second "friend".

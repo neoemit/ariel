@@ -14,9 +14,9 @@ CODE_SIGN_STYLE = Automatic
 // Push notifications (Firebase Cloud Messaging through APNs) need the paid Apple Developer
 // Program. A free Personal Team cannot sign the Push Notifications entitlement, so its builds
 // set ARIEL_PUSH_ENABLED = NO and use the empty Config/PersonalTeam.entitlements, as
-// scripts/ios-sideload.sh does: panics then reach the iPhone while Ariel is open (in-app alerts,
-// docs/ios.md). Leaving the entitlements setting empty does not work: Xcode then still asks for
-// Push Notifications.
+// scripts/ios-sideload.sh does: panics then reach the iPhone through the ntfy app (README) and while
+// Ariel is open (in-app alerts, docs/ios.md). Leaving the entitlements setting empty does not work:
+// Xcode then still asks for Push Notifications.
 ARIEL_PUSH_ENABLED = YES
 ARIEL_APP_ENTITLEMENTS = Ariel/Resources/Ariel.entitlements
 

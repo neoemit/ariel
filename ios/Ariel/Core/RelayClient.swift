@@ -29,6 +29,8 @@ enum RelayError: Error, Equatable {
 struct RelayClient: Sendable {
     static let platform = "ios"
     static let timeout: TimeInterval = 7
+    /// The ntfy test waits for the relay to see the poll request on ntfy.sh (15 s by default).
+    static let ntfyTestTimeout: TimeInterval = 35
 
     let baseURL: URL
     var appVersion: String?
@@ -83,14 +85,34 @@ struct RelayClient: Sendable {
         return (events, response.cursor)
     }
 
-    /// Whether the relay answers, and whether it can send pushes.
-    func health() async throws -> (reachable: Bool, pushReady: Bool) {
+    /// Publish this buddy's alerts to an ntfy topic: the one given, or, with nil, a new random one.
+    func subscribeNtfy(buddyId: String, topic: String?) async throws -> NtfySubscription {
+        let response: NtfySubscribeResponse = try await postDecoding(
+            "/v1/ntfy/subscribe", NtfySubscribeBody(buddyId: buddyId, topic: topic)
+        )
+        return NtfySubscription(topic: response.topic, serverURL: response.serverUrl)
+    }
+
+    func unsubscribeNtfy(buddyId: String, topic: String) async throws {
+        try await post("/v1/ntfy/unsubscribe", NtfyTopicBody(buddyId: buddyId, topic: topic))
+    }
+
+    /// Sends a test notification to this buddy's topic.
+    func testNtfy(buddyId: String, topic: String) async throws -> NtfyTestResult {
+        let response: NtfyTestResponse = try await postDecoding(
+            "/v1/ntfy/test", NtfyTopicBody(buddyId: buddyId, topic: topic), timeout: Self.ntfyTestTimeout
+        )
+        return NtfyTestResult(delivered: response.delivered, upstream: response.upstream)
+    }
+
+    /// Whether the relay answers, whether it can send pushes, and the ntfy server it publishes to.
+    func health() async throws -> (reachable: Bool, pushReady: Bool, ntfyServerURL: String?) {
         var request = URLRequest(url: url("/health"), timeoutInterval: Self.timeout)
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (status, body) = try await transport.send(request)
         guard (200..<300).contains(status) else { throw RelayError.http(status) }
         let health = try? JSONDecoder().decode(HealthResponse.self, from: body)
-        return (true, health?.firebaseReady ?? false)
+        return (true, health?.firebaseReady ?? false, health?.ntfyServerUrl?.trimmed.nonEmpty)
     }
 
     // MARK: - Plumbing
@@ -100,8 +122,8 @@ struct RelayClient: Sendable {
     }
 
     @discardableResult
-    private func post<Body: Encodable>(_ path: String, _ body: Body) async throws -> Data {
-        var request = URLRequest(url: url(path), timeoutInterval: Self.timeout)
+    private func post<Body: Encodable>(_ path: String, _ body: Body, timeout: TimeInterval = RelayClient.timeout) async throws -> Data {
+        var request = URLRequest(url: url(path), timeoutInterval: timeout)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -111,8 +133,10 @@ struct RelayClient: Sendable {
         return data
     }
 
-    private func postDecoding<Body: Encodable, Response: Decodable>(_ path: String, _ body: Body) async throws -> Response {
-        let data = try await post(path, body)
+    private func postDecoding<Body: Encodable, Response: Decodable>(
+        _ path: String, _ body: Body, timeout: TimeInterval = RelayClient.timeout
+    ) async throws -> Response {
+        let data = try await post(path, body, timeout: timeout)
         do {
             return try JSONDecoder().decode(Response.self, from: data)
         } catch {
@@ -177,6 +201,27 @@ private struct EventsResponse: Decodable {
     let cursor: Int
 }
 
+private struct NtfySubscribeBody: Encodable {
+    let buddyId: String
+    let topic: String?
+}
+
+private struct NtfySubscribeResponse: Decodable {
+    let topic: String
+    let serverUrl: String
+}
+
+private struct NtfyTopicBody: Encodable {
+    let buddyId: String
+    let topic: String
+}
+
+private struct NtfyTestResponse: Decodable {
+    let delivered: Bool
+    let upstream: String
+}
+
 private struct HealthResponse: Decodable {
     let firebaseReady: Bool?
+    let ntfyServerUrl: String?
 }

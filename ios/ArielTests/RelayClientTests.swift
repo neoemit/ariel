@@ -125,5 +125,53 @@ final class RelayClientTests: XCTestCase {
         XCTAssertTrue(health.pushReady)
         XCTAssertEqual(transport.requests.last?.httpMethod, "GET")
         XCTAssertEqual(transport.lastPath, "/health")
+        XCTAssertNil(health.ntfyServerURL)
+    }
+
+    func testHealthSaysWhereNtfyIs() async throws {
+        transport.response = Data(#"{"status":"ok","firebaseReady":false,"ntfyEnabled":true,"ntfyServerUrl":"https://ntfy.example.com"}"#.utf8)
+        let health = try await client.health()
+        XCTAssertFalse(health.pushReady)
+        XCTAssertEqual(health.ntfyServerURL, "https://ntfy.example.com")
+    }
+
+    func testSubscribeNtfy() async throws {
+        transport.response = Data(#"{"status":"ok","topic":"ariel_alice","serverUrl":"https://ntfy.example.com","subscribeUrl":"https://ntfy.example.com/ariel_alice"}"#.utf8)
+        let subscription = try await client.subscribeNtfy(buddyId: "User_1", topic: "ariel_alice")
+        XCTAssertEqual(subscription, NtfySubscription(topic: "ariel_alice", serverURL: "https://ntfy.example.com"))
+        XCTAssertEqual(transport.lastPath, "/v1/ntfy/subscribe")
+        XCTAssertEqual(transport.lastBody["buddyId"] as? String, "User_1")
+        XCTAssertEqual(transport.lastBody["topic"] as? String, "ariel_alice")
+    }
+
+    func testSubscribeNtfyWithoutATopicAsksForARandomOne() async throws {
+        transport.response = Data(#"{"status":"ok","topic":"ariel_x","serverUrl":"https://ntfy.example.com"}"#.utf8)
+        let subscription = try await client.subscribeNtfy(buddyId: "User_1", topic: nil)
+        XCTAssertEqual(subscription.topic, "ariel_x")
+        XCTAssertNil(transport.lastBody["topic"])
+    }
+
+    func testUnsubscribeNtfy() async throws {
+        try await client.unsubscribeNtfy(buddyId: "User_1", topic: "ariel_alice")
+        XCTAssertEqual(transport.lastPath, "/v1/ntfy/unsubscribe")
+        XCTAssertEqual(transport.lastBody["topic"] as? String, "ariel_alice")
+    }
+
+    func testTestNtfyWaitsLongerThanOtherCalls() async throws {
+        transport.response = Data(#"{"status":"ok","delivered":true,"upstream":"forwarded"}"#.utf8)
+        let result = try await client.testNtfy(buddyId: "User_1", topic: "ariel_alice")
+        XCTAssertEqual(result, NtfyTestResult(delivered: true, upstream: "forwarded"))
+        XCTAssertEqual(transport.lastPath, "/v1/ntfy/test")
+        XCTAssertEqual(transport.requests.last?.timeoutInterval, RelayClient.ntfyTestTimeout)
+    }
+
+    func testNtfyRefusalsThrowTheirStatus() async {
+        transport.status = 409
+        do {
+            _ = try await client.subscribeNtfy(buddyId: "User_1", topic: nil)
+            XCTFail("expected an error")
+        } catch {
+            XCTAssertEqual(error as? RelayError, .http(409))
+        }
     }
 }

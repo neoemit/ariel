@@ -27,6 +27,8 @@ struct SettingsView: View {
 
                 notificationsSection
 
+                NtfySection()
+
                 Section {
                     TextField(RelayURL.defaultString, text: $relayText)
                         .keyboardType(.URL)
@@ -89,6 +91,7 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .onAppear { relayText = model.relayURLOverride }
+            .task { await model.refreshNtfy() }
             .onChange(of: model.incomingAlert?.id) { _, id in
                 if id != nil { confirmingReset = false }
             }
@@ -100,10 +103,15 @@ struct SettingsView: View {
         }
     }
 
+    private var deliveryDescription: String {
+        if model.deliveryMode == .push { return "Push notifications" }
+        return model.ntfyTopic == nil ? "In-app alerts" : "ntfy app"
+    }
+
     @ViewBuilder
     private var notificationsSection: some View {
         Section {
-            LabeledContent("Delivery", value: model.deliveryMode == .push ? "Push notifications" : "In-app alerts")
+            LabeledContent("Delivery", value: deliveryDescription)
             switch model.notificationStatus {
             case .notDetermined:
                 Button("Allow notifications") {
@@ -123,10 +131,12 @@ struct SettingsView: View {
             switch model.deliveryMode {
             case .push:
                 Text("Panic alerts arrive as notifications with the siren, even when Ariel is closed.")
+            case .inApp where model.ntfyTopic != nil:
+                Text("Panic alerts arrive through the ntfy app, even when Ariel is closed. Tap one to open it here and answer. While Ariel is open, it also plays the siren.")
             case .inApp:
                 Text(model.configuration.pushRequested
-                    ? "This build has no Firebase configuration, so there is no push: panic alerts reach this iPhone while Ariel is open. Keep it open, or check in regularly."
-                    : "This build has no push (it is signed by a free Apple team): panic alerts reach this iPhone while Ariel is open, and now and then in the background. Keep it open, or check in regularly.")
+                    ? "This build has no Firebase configuration, so there is no push: panic alerts reach this iPhone while Ariel is open. Set up ntfy below to get them with Ariel closed."
+                    : "This build has no push (it is signed by a free Apple team): panic alerts reach this iPhone while Ariel is open, and now and then in the background. Set up ntfy below to get them with Ariel closed.")
             }
         }
     }
@@ -157,6 +167,104 @@ struct SettingsView: View {
     }
 }
 
+/// The ntfy topic that brings panics to the ntfy app, even with Ariel closed (README, "iPhone
+/// notifications through ntfy").
+private struct NtfySection: View {
+    private static let appStoreURL = URL(string: "https://apps.apple.com/us/app/ntfy/id1625396347")!
+
+    @Environment(ArielModel.self) private var model
+    @State private var topicText = ""
+    @State private var result: String?
+    @State private var working = false
+
+    var body: some View {
+        Section {
+            if let topic = model.ntfyTopic {
+                if let server = model.ntfyServerURL {
+                    copyRow("Server", value: server)
+                }
+                copyRow("Topic", value: topic)
+                Link("Get the ntfy app", destination: Self.appStoreURL)
+                actionButton("Send test notification") { await model.testNtfy() }
+                actionButton("Remove topic", role: .destructive) { await model.removeNtfyTopic() }
+            } else if let server = model.ntfyServerURL {
+                copyRow("Server", value: server)
+                TextField("Topic, such as \(NtfyTopic.prefix)alice", text: $topicText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                actionButton(topicText.trimmed.isEmpty ? "Generate a topic" : "Use this topic") {
+                    let error = await model.setNtfyTopic(topicText)
+                    if error == nil { topicText = "" }
+                    return error
+                }
+            } else {
+                LabeledContent("Status", value: unavailableStatus)
+            }
+            if let result {
+                Text(result)
+                    .font(.footnote)
+            }
+        } header: {
+            Text("ntfy")
+        } footer: {
+            if model.ntfyTopic != nil {
+                Text("In the ntfy app, tap +, enter this topic, turn on Use another server and enter the server above. Then send a test. Every device subscribed to the topic gets the panics sent to you.")
+            } else if model.ntfyServerURL != nil {
+                Text("Enter the topic your ntfy user can read, or leave it empty for a random one. Panics reach you through the ntfy app, even when Ariel is closed.")
+            } else if model.ntfyStatusKnown {
+                Text("Whoever runs the relay can connect it to an ntfy server (NTFY_BASE_URL) to bring panics to iPhones with Ariel closed.")
+            }
+        }
+    }
+
+    private var unavailableStatus: String {
+        if model.ntfyStatusKnown { return "Not set up on this relay" }
+        return model.lastRelayError == nil ? "Asking the relay…" : "Relay not reachable"
+    }
+
+    /// The ntfy app has no link to subscribe from on iPhone, so these go in by hand.
+    private func copyRow(_ title: String, value: String) -> some View {
+        Button {
+            UIPasteboard.general.string = value
+            result = "\(title) copied."
+        } label: {
+            LabeledContent {
+                HStack(spacing: 8) {
+                    Text(value)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Image(systemName: "doc.on.doc")
+                }
+            } label: {
+                Text(title)
+                    .foregroundStyle(Color.primary)
+            }
+        }
+        .accessibilityHint("Copies it")
+    }
+
+    /// A button for a call to the relay, whose answer is shown under it.
+    private func actionButton(_ title: String, role: ButtonRole? = nil, action: @escaping () async -> String?) -> some View {
+        Button(role: role) {
+            working = true
+            result = nil
+            Task {
+                result = await action()
+                working = false
+            }
+        } label: {
+            HStack {
+                Text(title)
+                if working {
+                    Spacer()
+                    ProgressView()
+                }
+            }
+        }
+        .disabled(working)
+    }
+}
+
 /// The first launch: what Ariel does on an iPhone, and the notification permission.
 struct OnboardingView: View {
     @Environment(ArielModel.self) private var model
@@ -177,7 +285,7 @@ struct OnboardingView: View {
                 case .push:
                     Label("Allow notifications so a buddy's panic reaches you even when Ariel is closed.", systemImage: "bell.badge.fill")
                 case .inApp:
-                    Label("This build has no push: a buddy's panic reaches you while Ariel is open. Allow notifications for the ones it finds in the background.", systemImage: "bell.badge.fill")
+                    Label("This build has no push: a buddy's panic reaches you while Ariel is open, or through the ntfy app once it is set up in Settings. Allow notifications for the ones Ariel finds in the background.", systemImage: "bell.badge.fill")
                 }
             }
             .font(.callout)

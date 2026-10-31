@@ -38,7 +38,8 @@ enum PanicDelivery: Equatable, Sendable {
 
 /// The app's state and behaviour: the iOS counterpart of Android's PanicViewModel and SirenService
 /// together. Panics go out through the relay (Nearby is Android-only); they come in by push, or, in
-/// builds without push, from the relay's inbox, which is polled while the app is open.
+/// builds without push, from the relay's inbox, which is polled while the app is open. With an ntfy
+/// topic, the ntfy app also shows them with Ariel closed, and tapping one opens the alert here.
 @MainActor
 @Observable
 final class ArielModel {
@@ -50,6 +51,8 @@ final class ArielModel {
     static let registrationInterval: Duration = .seconds(60)
     /// Inbox panics older than this do not ring any more.
     static let inboxMaxAgeSeconds = 300
+    /// How far back a tapped ntfy notification finds its panic: all that the relay's inbox keeps.
+    static let inboxRetentionSeconds = 3600
 
     let configuration: AppConfiguration
     let myId: String
@@ -90,6 +93,14 @@ final class ArielModel {
     private(set) var lastRelayContact: Date?
     private(set) var lastRelayError: String?
 
+    // ntfy, for Settings
+    /// The topic the relay publishes this device's alerts to.
+    private(set) var ntfyTopic: String?
+    /// The ntfy server the relay publishes to; nil when it has none, or has not answered yet.
+    private(set) var ntfyServerURL: String?
+    /// The relay has answered whether it has an ntfy server.
+    private(set) var ntfyStatusKnown = false
+
     var presenceStatus: PresenceStatus {
         PresenceStatus(
             confirmedOnlineCount: onlineBuddies.count,
@@ -99,6 +110,9 @@ final class ArielModel {
     }
 
     var deliveryMode: DeliveryMode { configuration.deliveryMode }
+
+    /// Nothing tells this device about a panic unless Ariel is open.
+    var alertsNeedOpenApp: Bool { deliveryMode == .inApp && ntfyTopic == nil }
 
     @ObservationIgnored private let prefs: Preferences
     @ObservationIgnored private let player = AlertPlayer()
@@ -110,6 +124,8 @@ final class ArielModel {
     @ObservationIgnored private var inboxPollInFlight = false
     /// Panics that arrived while another was on screen; shown one after the other.
     @ObservationIgnored private var queuedAlerts: [IncomingAlert] = []
+    /// Panics whose ntfy notification was tapped: someone is looking, so they open without the siren.
+    @ObservationIgnored private var tappedPanics: Set<String> = []
 
     private init(prefs: Preferences = Preferences(), configuration: AppConfiguration = .load()) {
         self.prefs = prefs
@@ -129,6 +145,8 @@ final class ArielModel {
         relayURL = RelayURL.resolve(prefs.relayURL)
         discreetMode = prefs.discreetMode
         pushToken = prefs.fcmToken
+        // Like the ID, it survives a reinstall: the devices subscribed to it stay subscribed.
+        ntfyTopic = prefs.ntfyTopic ?? KeychainStore.string(for: KeychainStore.ntfyTopicAccount)
         needsOnboarding = !prefs.onboarded
         refreshRecentlySeen()
     }
@@ -167,6 +185,7 @@ final class ArielModel {
             Task { [weak self] in await self?.inboxLoop() },
         ]
         Task { await refreshNotificationStatus() }
+        Task { await refreshNtfy() }
     }
 
     private func registrationLoop() async {
@@ -195,6 +214,7 @@ final class ArielModel {
     /// pick up panics, which then show as notifications.
     func performBackgroundRefresh() async {
         await register()
+        await refreshNtfy()
         // With push, the relay's alert has already been shown; reading the inbox would show it twice.
         if deliveryMode == .inApp {
             await pollInbox()
@@ -328,6 +348,8 @@ final class ArielModel {
         let isNew = prefs.markHandled(event)
         switch event {
         case .panic(let senderId, let eventId, let escalation):
+            // The inbox poll of the app opening may get to a tapped panic first.
+            let origin = tappedPanics.contains(eventId) ? .notificationTap : origin
             switch origin {
             case .live:
                 guard isNew else { return }
@@ -433,6 +455,28 @@ final class ArielModel {
         }
     }
 
+    /// A tap on a panic's ntfy notification, which cannot be answered there. It can come long after the
+    /// panic, when the inbox poll no longer shows it, and the sender may still be waiting for an answer.
+    func openAlert(eventId: String) async {
+        tappedPanics.insert(eventId)
+        for attempt in 1...3 {
+            do {
+                let (events, _) = try await relay.events(
+                    buddyId: myId, afterId: 0, maxAgeSeconds: Self.inboxRetentionSeconds
+                )
+                noteRelaySuccess()
+                let panic = events.first {
+                    if case .panic(_, eventId, _) = $0 { true } else { false }
+                }
+                if let panic { receive(panic, origin: .notificationTap) }
+                return
+            } catch {
+                noteRelayFailure(error)
+                if attempt < 3 { try? await Task.sleep(for: .seconds(2)) }
+            }
+        }
+    }
+
     func pollInbox() async {
         guard !inboxPollInFlight else { return }
         inboxPollInFlight = true
@@ -502,9 +546,12 @@ final class ArielModel {
         relayURL = RelayURL.resolve(prefs.relayURL)
         lastRelayContact = nil
         lastRelayError = nil
+        ntfyServerURL = nil
+        ntfyStatusKnown = false
         Task {
             await register()
             await refreshPresence()
+            await refreshNtfy()
         }
         return true
     }
@@ -514,10 +561,94 @@ final class ArielModel {
         do {
             let health = try await relay.health()
             noteRelaySuccess()
-            return health.pushReady ? "Relay reachable, push delivery ready." : "Relay reachable, but it cannot send pushes."
+            noteNtfyServer(health.ntfyServerURL)
+            let push = health.pushReady ? "push delivery ready" : "it cannot send pushes"
+            let ntfy = health.ntfyServerURL == nil ? "no ntfy server" : "ntfy ready"
+            return "Relay reachable: \(push), \(ntfy)."
         } catch {
             noteRelayFailure(error)
             return "Relay not reachable: \(Self.describe(error))"
+        }
+    }
+
+    // MARK: - ntfy
+
+    /// Reads whether the relay has an ntfy server, and makes sure that it knows this device's topic: it
+    /// may be another relay by now, or have lost its database.
+    func refreshNtfy() async {
+        do {
+            let health = try await relay.health()
+            noteRelaySuccess()
+            noteNtfyServer(health.ntfyServerURL)
+            if let topic = ntfyTopic, health.ntfyServerURL != nil {
+                _ = try await relay.subscribeNtfy(buddyId: myId, topic: topic)
+            }
+        } catch {
+            noteRelayFailure(error)
+        }
+    }
+
+    /// Attaches a topic to this device: what was typed, or, when nothing was, a random one from the
+    /// relay. Returns a message for the user when it does not work.
+    func setNtfyTopic(_ raw: String) async -> String? {
+        var requested: String?
+        if !raw.trimmed.isEmpty {
+            guard let topic = NtfyTopic.normalize(raw) else {
+                return "A topic is up to \(NtfyTopic.maxLength - NtfyTopic.prefix.count) letters, digits, - or _."
+            }
+            requested = topic
+        }
+        do {
+            let subscription = try await relay.subscribeNtfy(buddyId: myId, topic: requested)
+            noteRelaySuccess()
+            noteNtfyServer(subscription.serverURL)
+            storeNtfyTopic(subscription.topic)
+            return nil
+        } catch {
+            noteRelayFailure(error)
+            return Self.describeNtfy(error)
+        }
+    }
+
+    /// Stops the relay publishing to this device's topic. Returns a message for the user when it does not work.
+    func removeNtfyTopic() async -> String? {
+        guard let topic = ntfyTopic else { return nil }
+        do {
+            try await relay.unsubscribeNtfy(buddyId: myId, topic: topic)
+            noteRelaySuccess()
+            storeNtfyTopic(nil)
+            return nil
+        } catch {
+            noteRelayFailure(error)
+            return Self.describeNtfy(error)
+        }
+    }
+
+    /// Sends a test notification to this device's topic, and says how it went.
+    func testNtfy() async -> String {
+        guard let topic = ntfyTopic else { return "" }
+        do {
+            let result = try await relay.testNtfy(buddyId: myId, topic: topic)
+            noteRelaySuccess()
+            return result.summary
+        } catch {
+            noteRelayFailure(error)
+            return Self.describeNtfy(error)
+        }
+    }
+
+    private func noteNtfyServer(_ url: String?) {
+        ntfyServerURL = url
+        ntfyStatusKnown = true
+    }
+
+    private func storeNtfyTopic(_ topic: String?) {
+        ntfyTopic = topic
+        prefs.ntfyTopic = topic
+        if let topic {
+            KeychainStore.set(topic, for: KeychainStore.ntfyTopicAccount)
+        } else {
+            KeychainStore.remove(KeychainStore.ntfyTopicAccount)
         }
     }
 
@@ -556,6 +687,16 @@ final class ArielModel {
         case RelayError.http(let status): "the relay answered HTTP \(status)"
         case RelayError.invalidResponse: "the relay's answer was not understood"
         default: error.localizedDescription
+        }
+    }
+
+    private static func describeNtfy(_ error: Error) -> String {
+        switch error {
+        case RelayError.http(403): "The relay already has too many ntfy topics for this device."
+        case RelayError.http(404): "The relay does not know this topic yet. Try again in a moment."
+        case RelayError.http(409): "This relay has no ntfy server set up."
+        case RelayError.http(422): "The relay does not accept that topic."
+        default: describe(error)
         }
     }
 }

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Ariel is an Android and iOS emergency alert ("panic button") app. When triggered, it blasts a loud alarm on all paired buddy devices simultaneously via two independent channels: Google Play Services Nearby (P2P Bluetooth/WiFi, Android only) and Firebase Cloud Messaging (FCM) through a Python/FastAPI relay backend. The iOS app (`ios/`) uses the relay only.
+Ariel is an Android and iOS emergency alert ("panic button") app. When triggered, it blasts a loud alarm on all paired buddy devices simultaneously via two independent channels: Google Play Services Nearby (P2P Bluetooth/WiFi, Android only) and Firebase Cloud Messaging (FCM) through a Python/FastAPI relay backend. The iOS app (`ios/`) uses the relay only; iPhones without push also get alerts through a self-hosted ntfy server and the ntfy app.
 
 ## Build commands
 
@@ -43,6 +43,7 @@ scripts/ios-sideload.sh
 - `ios/Ariel/Core/` is Foundation-only (relay client, wire protocol, presence logic, preferences) so it can be unit-tested anywhere; UI and Apple frameworks stay in `App/`, `Services/`, `UI/`.
 - `ArielModel` is the iOS counterpart of `PanicViewModel` + `SirenService`.
 - Push vs in-app alerts: `ARIEL_PUSH_ENABLED` (xcconfig → Info.plist `ArielPushEnabled`) plus a bundled `GoogleService-Info.plist` give push; otherwise the app polls the relay's `/v1/events` inbox while open. Free Apple teams cannot sign push, so `scripts/ios-sideload.sh` builds them in-app with `ios/Config/PersonalTeam.entitlements`.
+- ntfy works with any build: Settings › ntfy attaches a topic to the buddy ID (`/v1/ntfy/subscribe`), the relay publishes to it, the ntfy app shows it, and tapping opens `ariel://alert?event=<id>`, which reads the panic from the inbox. Setup is in the README.
 - The iOS version is stamped from `appVersionMinor` in `app/build.gradle.kts` (`ios/Config/stamp-version.sh`): 1.N, build N.
 
 ## Testing with virtual buddy
@@ -87,7 +88,7 @@ Nearby payloads are plain strings:
 - Outgoing panic: `PANIC:<senderId>:<escalationType>:<eventId>`
 - Acknowledgment: `ACK:<acknowledgerName>`
 
-FCM data messages use JSON with `type: "panic"` or `type: "ack"` keys. The relay adds an APNs alert (title/body, `siren.wav`, category `PANIC`/`ACK`) to every message for iOS tokens; Android ignores it. The relay inbox (`/v1/events`) returns the same keys.
+FCM data messages use JSON with `type: "panic"` or `type: "ack"` keys. The relay adds an APNs alert (title/body, `siren.wav`, category `PANIC`/`ACK`) to every message for iOS tokens; Android ignores it. The relay inbox (`/v1/events`) returns the same keys. ntfy notifications carry the same title and body as the APNs alert (`alert_text` in `backend/app/main.py`).
 
 ### Backend (`backend/app/main.py`)
 
@@ -95,9 +96,10 @@ FastAPI REST API backed by SQLite. Endpoints:
 - Device registration (stores FCM token keyed by nearby-advertised ID)
 - Heartbeat (presence for push-less clients such as free-team iOS builds)
 - Presence polling (devices heartbeat every ~60s; considered online within 180s)
-- Panic forwarding (stores the event in each recipient's inbox, then looks up recipient FCM tokens and calls Firebase Admin SDK)
+- Panic forwarding (stores the event in each recipient's inbox, publishes to their ntfy topics in the background, then looks up recipient FCM tokens and calls Firebase Admin SDK)
 - Acknowledgment forwarding (same, to the panic sender)
 - Event inbox (`/v1/events`: the last hour's panics/acks per buddy, polled by push-less clients)
+- ntfy topics (`/v1/ntfy/subscribe`, `/unsubscribe`, `/test`; publishing and the iOS delivery check are in `backend/app/ntfy.py`, a port of PTT's `server/ntfy.py`)
 
 Tests: `cd backend && pip install -r requirements.txt pytest httpx && python -m pytest`.
 

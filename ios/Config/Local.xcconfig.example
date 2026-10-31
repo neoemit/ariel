@@ -5,7 +5,8 @@
 DEVELOPMENT_TEAM = ABCDE12345
 
 // Free "Personal Team" (no paid Apple Developer Program)? It cannot sign Push Notifications, so
-// build with in-app alerts instead. scripts/ios-sideload.sh does this by itself.
+// build without them: alerts come through the ntfy app (README) and while Ariel is open.
+// scripts/ios-sideload.sh does this by itself.
 // ARIEL_PUSH_ENABLED = NO
 // ARIEL_APP_ENTITLEMENTS = Config/PersonalTeam.entitlements
 

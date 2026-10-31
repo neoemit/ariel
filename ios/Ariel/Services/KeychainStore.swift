@@ -5,6 +5,7 @@ import Security
 /// buddies have scanned.
 enum KeychainStore {
     static let buddyIdAccount = "buddy-id"
+    static let ntfyTopicAccount = "ntfy-topic"
     private static let service = Bundle.main.bundleIdentifier ?? "ariel"
 
     static func string(for account: String) -> String? {
@@ -26,6 +27,10 @@ enum KeychainStore {
         if SecItemUpdate(baseQuery(account) as CFDictionary, attributes as CFDictionary) == errSecItemNotFound {
             SecItemAdd(baseQuery(account).merging(attributes) { $1 } as CFDictionary, nil)
         }
+    }
+
+    static func remove(_ account: String) {
+        SecItemDelete(baseQuery(account) as CFDictionary)
     }
 
     private static func baseQuery(_ account: String) -> [String: Any] {

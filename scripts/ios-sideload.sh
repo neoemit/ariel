@@ -12,9 +12,10 @@
 # It runs scripts/ios-check-env.sh first and uses its settings.
 #
 # A device needs Developer Mode on (Settings › Privacy & Security › Developer Mode) and has to be
-# unlocked while the app installs. With a free Personal Team the app is built without push (in-app
-# alerts: a buddy's panic reaches the iPhone while Ariel is open) and stops opening after 7 days: run
-# this again before then, or let scripts/ios-renew.sh do it. The app's data is kept.
+# unlocked while the app installs. With a free Personal Team the app is built without push (a buddy's
+# panic reaches the iPhone through the ntfy app, once it is set up as in the README, and while Ariel is
+# open) and stops opening after 7 days: run this again before then, or let scripts/ios-renew.sh do it.
+# The app's data is kept.
 
 SCRIPT=${0:A}
 source ${SCRIPT:h}/ios-check-env.sh

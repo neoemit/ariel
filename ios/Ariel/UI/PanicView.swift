@@ -43,7 +43,7 @@ struct PanicView: View {
                     .padding(.top, 24)
             }
             Spacer(minLength: 16)
-            if model.deliveryMode == .inApp {
+            if model.alertsNeedOpenApp {
                 Label("Alerts reach this iPhone while Ariel is open.", systemImage: "info.circle")
                     .font(.caption)
                     .foregroundStyle(Color.arielOnSurfaceVariant)

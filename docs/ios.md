@@ -5,7 +5,7 @@ same panic button (hold 1.5 s, three escalation segments), QR pairing with the s
 same relay backend, and acknowledgments both ways between Android and iOS.
 
 - [1. What you need](#1-what-you-need)
-- [2. Push or in-app alerts](#2-push-or-in-app-alerts)
+- [2. Push, ntfy or in-app alerts](#2-push-ntfy-or-in-app-alerts)
 - [3. Project layout](#3-project-layout)
 - [4. One-time setup](#4-one-time-setup)
 - [5. Build and run](#5-build-and-run)
@@ -24,8 +24,8 @@ same relay backend, and acknowledgments both ways between Android and iOS.
 |-------------|-------|
 | Mac with **Xcode 16 or newer** | |
 | iPhone or iPad on **iOS 17+** | The Simulator works too (no camera: add buddies by ID). |
-| An **Apple ID** signed in to Xcode | A free one (Personal Team) is enough for your own devices, with [in-app alerts](#2-push-or-in-app-alerts) and a 7-day signature. Push needs the paid **Apple Developer Program**. |
-| A relay backend with the iOS changes | [`backend/`](../backend) from this repository: `/v1/heartbeat`, `/v1/events` and the APNs alert. Older relays have neither, so iOS buddies look offline and in-app alerts never arrive. |
+| An **Apple ID** signed in to Xcode | A free one (Personal Team) is enough for your own devices, with [ntfy and in-app alerts](#2-push-ntfy-or-in-app-alerts) and a 7-day signature. Push needs the paid **Apple Developer Program**. |
+| A relay backend with the iOS changes | [`backend/`](../backend) from this repository: `/v1/heartbeat`, `/v1/events`, `/v1/ntfy/*` and the APNs alert. Older relays have none of them, so iOS buddies look offline and in-app alerts and ntfy never arrive. |
 | `jq` (`brew install jq`) | For the scripts. |
 | Optional: **XcodeGen** (`brew install xcodegen`) | Only to regenerate the project after adding or removing files, see [section 10](#10-regenerating-the-xcode-project). |
 
@@ -35,25 +35,31 @@ Package Manager on the first build and pinned in
 
 ---
 
-## 2. Push or in-app alerts
+## 2. Push, ntfy or in-app alerts
 
-How a buddy's panic reaches an iPhone depends on the build:
+How a buddy's panic reaches an iPhone depends on the build and on whether ntfy is set up:
 
-| | Push | In-app alerts |
-|---|---|---|
-| Who | Paid Apple Developer Program team, with `GoogleService-Info.plist` | Free Personal Team, or any build without Firebase config, or `--in-app` |
-| App closed or phone locked | Notification with the siren sound | Nothing, except what background refresh finds now and then |
-| App open | Full-screen alert with the siren | Same: the app reads the relay's inbox every 4 seconds |
-| "I am coming!" | From the notification or the app | From the app |
-| Buddy badge | iOS buddies show online while Ariel is open | Same |
+| | Push | ntfy | In-app alerts only |
+|---|---|---|---|
+| Who | Paid Apple Developer Program team, with `GoogleService-Info.plist` | Any build, with an ntfy server on the relay and a topic in Settings | Free Personal Team, or any build without Firebase config, or `--in-app`, without a topic |
+| App closed or phone locked | Notification with the siren sound | Notification from the ntfy app, with its ordinary sound | Nothing, except what background refresh finds now and then |
+| App open | Full-screen alert with the siren | Same: the app reads the relay's inbox every 4 seconds | Same |
+| "I am coming!" | From the notification or the app | From the app: tapping the notification opens the alert | From the app |
+| Buddy badge | iOS buddies show online while Ariel is open | Same | Same |
 
 Builds signed by a free team cannot have the Push Notifications entitlement, so
-[`scripts/ios-sideload.sh`](#6-sideloading-onto-your-iphones-and-ipads) builds them with in-app alerts
-by itself (`ARIEL_PUSH_ENABLED = NO` and the empty `ios/Config/PersonalTeam.entitlements`). The
-Settings screen says which kind a build is, and the panic screen reminds in-app builds to stay open.
+[`scripts/ios-sideload.sh`](#6-sideloading-onto-your-iphones-and-ipads) builds them without push by
+itself (`ARIEL_PUSH_ENABLED = NO` and the empty `ios/Config/PersonalTeam.entitlements`). The Settings
+screen says which kind a build is, and the panic screen reminds a build with neither push nor a topic
+to stay open.
 
-**In-app alerts are for development and testing.** A phone that relies on Ariel to hear a buddy's
-panic needs the push build.
+**ntfy** needs no Apple entitlement, as the ntfy app is the one receiving the notification. Setting it
+up, on the server, on the relay, in Ariel and in the ntfy app, is in the
+[README](../README.md#iphone-notifications-through-ntfy), with what it does not do: until ntfy's iOS app
+has Critical Alerts, it does not break through the Ring/Silent switch.
+
+**In-app alerts alone are for development and testing.** A phone that relies on Ariel to hear a buddy's
+panic needs push or ntfy.
 
 In-app alerts use two relay endpoints added for iOS: `/v1/heartbeat` (presence without a push token)
 and `/v1/events` (an inbox of the last hour's panics and acknowledgments per buddy). The relay
@@ -74,13 +80,13 @@ ios/
 │   └── stamp-version.sh         # build phase: version from app/build.gradle.kts
 ├── Ariel/
 │   ├── App/               # entry point, AppDelegate (notifications, APNs), background refresh
-│   ├── Core/              # Foundation only: relay client, protocol, presence logic, preferences
+│   ├── Core/              # Foundation only: relay client, protocol, presence logic, preferences, ntfy topics
 │   ├── Services/          # ArielModel (state), siren, local notifications, Firebase, Keychain
 │   ├── Intents/           # "Send Panic Alert" for Shortcuts, Siri and the Action Button
 │   ├── UI/                # Panic, Pairing and Settings screens, incoming alert, QR codes
 │   └── Resources/         # Info.plist, entitlements, assets, siren.wav (+ your GoogleService-Info.plist)
 ├── ArielWidget/           # Home Screen and Lock Screen panic button
-├── Shared/                # code compiled into both the app and the widget (ariel:// links)
+├── Shared/                # code compiled into both the app and the widget (ariel:// links, which ntfy notifications open too)
 └── ArielTests/            # unit tests (the Core layer)
 ```
 
@@ -104,6 +110,9 @@ Set `DEVELOPMENT_TEAM` (developer.apple.com › Membership) in `Local.xcconfig`.
 With a free team, also uncomment the two in-app lines (the sideload script does this by itself).
 
 ### 4.2 Push notifications (paid team only)
+
+Without a paid team, skip this: alerts come through [ntfy](../README.md#iphone-notifications-through-ntfy).
+
 
 The relay sends every push through Firebase Cloud Messaging, which hands iOS messages to APNs with
 a visible alert (title, body, `siren.wav`, the `PANIC` category with *I am coming!*). Android
@@ -176,7 +185,7 @@ build, then the app is installed and the date its signature runs out is printed.
 | `--device UDID` | A specific device, repeatable |
 | `--all` | Every reachable device. **This includes other people's phones** |
 | `--debug` | A quicker build, without the Release optimisations |
-| `--in-app` | In-app alerts even with a paid team (to try what free-team users get) |
+| `--in-app` | No push even with a paid team (to try what free-team users get) |
 | `--build-only` | Build and sign, install nothing |
 
 Once per device:
@@ -194,11 +203,11 @@ Settings come from the environment, then `ios/Config/Local.xcconfig`:
 |----------|---------|--------------|
 | `APPLE_DEVELOPMENT_TEAM` | The team Xcode is signed in to, if there is only one | Team ID to sign with (`DEVELOPMENT_TEAM` in `Local.xcconfig`) |
 | `ARIEL_IOS_BUNDLE_ID` | `APP_BUNDLE_ID` from `ios/Config` | Bundle ID; the widget's follows it |
-| `ARIEL_RELAY_URL` | not set | Only checked: the relay answers, can push, and has `/v1/events` |
+| `ARIEL_RELAY_URL` | not set | Only checked: the relay answers, can push, has ntfy, and has `/v1/events` |
 
 With a **free Personal Team**:
 
-- The app has [in-app alerts](#2-push-or-in-app-alerts), not push.
+- The app has [ntfy and in-app alerts](#2-push-ntfy-or-in-app-alerts), not push.
 - The signature lasts **7 days**. Run the script again before then, or schedule the renewal below.
   Reinstalling replaces the app and keeps its data (buddies, ID, settings).
 - A device holds at most 3 apps signed by free teams, and a free team can register 10 App IDs a week
@@ -237,16 +246,16 @@ and its device cannot be reached, the Mac shows a notification. It logs to
   the Ring/Silent switch while Ariel is open and keeps playing if the phone is locked while it rings.
   It cannot set the system volume. A push notification plays it once (up to 30 seconds).
 - **Discreet mode** vibrates instead of the siren in the app and for the app's own notifications.
-  Push notifications are composed by the relay, which does not know about it, so they keep the
-  sound; mute them with Focus or the Ring/Silent switch.
-- **Notifications show the buddy ID**, not your nickname for them, when they come by push (the relay
-  does not know nicknames). Inside the app, nicknames are used.
+  Push and ntfy notifications are composed by the relay, which does not know about it, so they keep
+  the sound; mute them with Focus or the Ring/Silent switch.
+- **Notifications show the buddy ID**, not your nickname for them, when they come by push or ntfy (the
+  relay does not know nicknames). Inside the app, nicknames are used.
 - **Widget**: Home Screen (small) and Lock Screen (circular). Tapping it opens Ariel, which sends a
   generic panic straight away, like Android's one-tap widget.
 - **Shortcuts, Siri and the Action Button**: *Send Panic Alert*, with a choice of alert type.
   Settings › Action Button › Shortcut › Ariel turns the Action Button into a panic button.
-- **Identity**: the buddy ID (`User_1234`) is kept in the Keychain too, so reinstalling the app keeps
-  it and buddies don't have to scan again.
+- **Identity**: the buddy ID (`User_1234`) and the ntfy topic are kept in the Keychain too, so
+  reinstalling the app keeps them, and buddies don't have to scan again.
 - **Failed sends are shown**: since the relay is the only channel, the panic screen says when it could
   not be reached and offers *Try again* (same event ID, so nobody is alerted twice).
 
@@ -276,6 +285,7 @@ it. On the Simulator, use *Enter buddy ID* as there is no camera.
 | Symptom | Fix |
 |---------|-----|
 | Build warning *GoogleService-Info.plist not found* | Expected without push. For push, add the file ([4.2](#42-push-notifications-paid-team-only)). |
+| No notifications with Ariel closed, in a build without push | Set up [ntfy](../README.md#iphone-notifications-through-ntfy); its troubleshooting table is there too. |
 | *Signing for "Ariel" requires a development team* | Set `DEVELOPMENT_TEAM` in `ios/Config/Local.xcconfig`. |
 | *Personal development teams … do not support the Push Notifications capability* or *Time Sensitive Notifications* | Free teams cannot sign either: use `scripts/ios-sideload.sh`, or set the two in-app lines in `Local.xcconfig`. |
 | Ariel does not open: *Untrusted Developer* | Settings › General › VPN & Device Management › your Apple ID › Trust. |
@@ -314,5 +324,6 @@ xcodebuild test -project ios/Ariel.xcodeproj -scheme Ariel \
 
 The tests cover the Core layer: the relay client against a fake transport (every endpoint's request
 and response), push and inbox payload parsing, deduplication, the presence logic ported from
-Android (discovery window, offline grace, recently seen), buddy ID and relay URL validation, and
-the push/in-app switch. Use any installed iPhone Simulator in `-destination`. The relay's side is covered by `backend/tests/test_relay.py`.
+Android (discovery window, offline grace, recently seen), buddy ID, relay URL and ntfy topic
+validation, `ariel://` links, and the push/in-app switch. Use any installed iPhone Simulator in
+`-destination`. The relay's side is covered by `backend/tests/`.
