@@ -12,6 +12,12 @@ enum Escalation: String, CaseIterable, Codable, Sendable {
         self = wireValue.flatMap { Escalation(rawValue: $0.trimmingCharacters(in: .whitespaces).uppercased()) } ?? .generic
     }
 
+    /// From a Home Screen quick action's type in Info.plist: `<bundle ID>.panic.MEDICAL`.
+    init?(quickActionType type: String) {
+        guard let marker = type.range(of: ".panic.", options: .backwards) else { return nil }
+        self.init(rawValue: String(type[marker.upperBound...]))
+    }
+
     var emoji: String {
         switch self {
         case .generic: "🚨"

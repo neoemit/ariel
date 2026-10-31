@@ -60,6 +60,31 @@ final class NotificationService {
         post(content, id: "ack-\(acknowledgerId)-\(eventId)")
     }
 
+    /// How a panic sent from the widget went, as it has no screen to say so. Success makes no sound: it
+    /// could give someone away. Tapping a failure sends the panic again.
+    func postOwnPanic(_ panic: OwnPanic, delivery: PanicDelivery, discreet: Bool) {
+        let content = UNMutableNotificationContent()
+        switch delivery {
+        case .sent:
+            content.title = "Panic alert sent \(panic.escalation.emoji)"
+            content.body = "Your buddies have been notified."
+        case .failed:
+            content.title = "Panic alert NOT sent"
+            content.body = "The relay could not be reached, so your buddies may not know. Tap to try again."
+            content.userInfo = panic.retryUserInfo
+        case .noBuddies:
+            content.title = "Panic alert NOT sent"
+            content.body = "Your panic pool is empty: add buddies on the Pairing tab first."
+        case .idle, .sending:
+            return
+        }
+        if delivery != .sent {
+            content.sound = discreet ? nil : .default
+            content.interruptionLevel = .timeSensitive
+        }
+        post(content, id: "own-panic-\(panic.eventId)")
+    }
+
     /// Clears the notifications of a panic once it is answered.
     func removeDelivered(eventId: String) {
         let center = center

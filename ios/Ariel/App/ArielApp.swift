@@ -21,7 +21,7 @@ struct ArielApp: App {
     private func open(_ url: URL) {
         switch DeepLink(url: url) {
         case .panic(let type):
-            ArielModel.shared.triggerPanic(type.map { Escalation(wireValue: $0) })
+            Task { await ArielModel.shared.sendQuickPanic(Escalation(wireValue: type)) }
         case .alert(let eventId):
             Task { await ArielModel.shared.openAlert(eventId: eventId) }
         case .home, nil:

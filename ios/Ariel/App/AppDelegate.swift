@@ -19,6 +19,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return true
     }
 
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        configuration.delegateClass = SceneDelegate.self
+        return configuration
+    }
+
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         MainActor.assumeIsolated {
             PushManager.shared.setAPNsToken(deviceToken)
@@ -54,7 +64,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        guard let event = RelayEvent(userInfo: response.notification.request.content.userInfo) else {
+        let userInfo = response.notification.request.content.userInfo
+        if let panic = OwnPanic(retryUserInfo: userInfo) {
+            Task { @MainActor in
+                await ArielModel.shared.retryQuickPanic(panic)
+                completionHandler()
+            }
+            return
+        }
+        guard let event = RelayEvent(userInfo: userInfo) else {
             completionHandler()
             return
         }

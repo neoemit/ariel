@@ -44,6 +44,7 @@ scripts/ios-sideload.sh
 - `ArielModel` is the iOS counterpart of `PanicViewModel` + `SirenService`.
 - Push vs in-app alerts: `ARIEL_PUSH_ENABLED` (xcconfig → Info.plist `ArielPushEnabled`) plus a bundled `GoogleService-Info.plist` give push; otherwise the app polls the relay's `/v1/events` inbox while open. Free Apple teams cannot sign push, so `scripts/ios-sideload.sh` builds them in-app with `ios/Config/PersonalTeam.entitlements`.
 - ntfy works with any build: Settings › ntfy attaches a topic to the buddy ID (`/v1/ntfy/subscribe`), the relay publishes to it, the ntfy app shows it, and tapping opens `ariel://alert?event=<id>`, which reads the panic from the inbox. Setup is in the README.
+- Panics with no hold end in `ArielModel.sendQuickPanic`: the widget's buttons (`WidgetPanicIntent`, a `LiveActivityIntent` so iOS runs it in the app's process, as free teams cannot sign an App Group to share the buddies with the widget), the icon's quick actions (`SceneDelegate`, `UIApplicationShortcutItems` in Info.plist), `ariel://panic` and Shortcuts.
 - The iOS version is stamped from `appVersionMinor` in `app/build.gradle.kts` (`ios/Config/stamp-version.sh`): 1.N, build N.
 
 ## Testing with virtual buddy

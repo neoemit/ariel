@@ -18,6 +18,59 @@ final class EscalationTests: XCTestCase {
         XCTAssertEqual(Escalation.armed.alertBody(for: "Sam"), "Sam is in danger and requires armed response.")
         XCTAssertEqual(Escalation.generic.alertBody(for: "Sam"), "Sam requires urgent assistance.")
     }
+
+    func testQuickActionTypes() {
+        XCTAssertEqual(Escalation(quickActionType: "com.example.panic.MEDICAL"), .medical)
+        XCTAssertEqual(Escalation(quickActionType: "com.panic.example.panic.ARMED"), .armed)
+        XCTAssertNil(Escalation(quickActionType: "com.example.panic.FIRE"))
+        XCTAssertNil(Escalation(quickActionType: "com.example.MEDICAL"))
+    }
+
+    /// A quick action nobody handles would open Ariel without alerting anyone.
+    func testEveryQuickActionInInfoPlistIsAnAlertType() throws {
+        let items = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "UIApplicationShortcutItems") as? [[String: String]])
+        let types = items.compactMap { $0["UIApplicationShortcutItemType"] }
+        XCTAssertEqual(types.compactMap(Escalation.init(quickActionType:)), [.medical, .generic, .armed])
+        XCTAssertEqual(types.count, items.count)
+    }
+
+    func testTheWidgetsIntentCarriesTheWireValue() {
+        for escalation in Escalation.allCases {
+            let intent = WidgetPanicIntent(escalation: escalation)
+            XCTAssertEqual(Escalation(wireValue: intent.escalationType), escalation)
+        }
+    }
+}
+
+final class OwnPanicTests: XCTestCase {
+    private let start = Date(timeIntervalSince1970: 1000)
+
+    func testAnotherTapOnTheSameButtonSoonIsTheSamePanic() {
+        let panic = OwnPanic(escalation: .medical, sentAt: start)
+        XCTAssertTrue(panic.isRepeated(by: .medical, at: start.addingTimeInterval(29)))
+    }
+
+    func testAnotherKindOfHelpIsANewPanic() {
+        let panic = OwnPanic(escalation: .medical, sentAt: start)
+        XCTAssertFalse(panic.isRepeated(by: .armed, at: start.addingTimeInterval(1)))
+    }
+
+    func testTheSameButtonLaterIsANewPanic() {
+        let panic = OwnPanic(escalation: .medical, sentAt: start)
+        XCTAssertFalse(panic.isRepeated(by: .medical, at: start.addingTimeInterval(30)))
+    }
+
+    func testRetryingFromANotificationKeepsTheEvent() {
+        let panic = OwnPanic(eventId: "event-1", escalation: .armed)
+        let restored = OwnPanic(retryUserInfo: panic.retryUserInfo as [AnyHashable: Any])
+        XCTAssertEqual(restored?.eventId, "event-1")
+        XCTAssertEqual(restored?.escalation, .armed)
+    }
+
+    func testOtherNotificationsAreNotRetries() {
+        XCTAssertNil(OwnPanic(retryUserInfo: ["type": "panic", "eventId": "event-1"]))
+        XCTAssertNil(OwnPanic(retryUserInfo: ["ownPanicEventId": "event-1", "ownPanicEscalation": "FIRE"]))
+    }
 }
 
 final class RelayEventTests: XCTestCase {
@@ -185,6 +238,21 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertFalse(AppConfiguration.isYes("NO"))
         XCTAssertFalse(AppConfiguration.isYes(""))
         XCTAssertFalse(AppConfiguration.isYes(nil))
+    }
+
+    /// Reads the Android version from this checkout, which a simulator can reach.
+    func testTheBuiltAppHasTheAndroidVersion() throws {
+        let gradle = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("app/build.gradle.kts")
+        let text = try String(contentsOf: gradle, encoding: .utf8)
+        let line = try XCTUnwrap(text.split(separator: "\n").first { $0.contains("val appVersionMinor") })
+        let minor = String(line.filter(\.isNumber))
+        XCTAssertFalse(minor.isEmpty)
+
+        let info = try XCTUnwrap(Bundle.main.infoDictionary)
+        XCTAssertEqual(info["CFBundleShortVersionString"] as? String, "1.\(minor)")
+        XCTAssertEqual(info["CFBundleVersion"] as? String, minor)
     }
 }
 

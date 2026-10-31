@@ -53,6 +53,9 @@ final class ArielModel {
     static let inboxMaxAgeSeconds = 300
     /// How far back a tapped ntfy notification finds its panic: all that the relay's inbox keeps.
     static let inboxRetentionSeconds = 3600
+    /// With nobody watching a widget's tap there is no retry button, and each attempt can take the relay
+    /// client's 7 s timeout. iOS gives an app launched in the background about 30 s.
+    static let quickPanicAttempts = 3
 
     let configuration: AppConfiguration
     let myId: String
@@ -70,6 +73,7 @@ final class ArielModel {
     var selectedEscalation: Escalation = .generic
     private(set) var isPanicTriggered = false
     private(set) var panicDelivery: PanicDelivery = .idle
+    @ObservationIgnored private var lastPanic: OwnPanic?
     /// Who just acknowledged this device's panic; shown for a few seconds.
     private(set) var acknowledgedBy: String?
 
@@ -292,22 +296,57 @@ final class ArielModel {
 
     // MARK: - Outgoing panic
 
-    /// Sends a panic to every trusted buddy. The 1.5 s hold, the widget and the Shortcuts action end here.
-    func triggerPanic(_ escalation: Escalation? = nil) {
+    /// Sends a panic to every trusted buddy, after the 1.5 s hold on the panic button.
+    func triggerPanic() {
         guard !isPanicTriggered else { return }
-        if let escalation { selectedEscalation = escalation }
+        let panic = OwnPanic(escalation: selectedEscalation)
+        lastPanic = panic
         isPanicTriggered = true
-        send(eventId: UUID().uuidString.lowercased(), escalation: selectedEscalation)
+        Task { await send(panic) }
+    }
+
+    /// Sends a panic with no hold first: the widget, a Home Screen quick action, a link or Shortcuts. It
+    /// returns once the relay has answered, as iOS may suspend the app after that. An older panic still
+    /// on the panic screen does not stop it.
+    @discardableResult
+    func sendQuickPanic(_ escalation: Escalation) async -> PanicDelivery {
+        if let lastPanic, lastPanic.isRepeated(by: escalation, at: Date()) {
+            guard case .failed = panicDelivery else { return panicDelivery }
+            return await deliverQuickPanic(lastPanic)
+        }
+        return await deliverQuickPanic(OwnPanic(escalation: escalation))
+    }
+
+    /// The notification that said a panic failed was tapped.
+    func retryQuickPanic(_ panic: OwnPanic) async {
+        await deliverQuickPanic(panic)
     }
 
     /// Sends a panic that could not reach the relay again, with the same event ID, so a buddy who did get
     /// it is not alerted twice.
     func retryPanic() {
         guard case .failed(let eventId, let escalation) = panicDelivery else { return }
-        send(eventId: eventId, escalation: escalation)
+        Task { await send(OwnPanic(eventId: eventId, escalation: escalation)) }
     }
 
-    private func send(eventId: String, escalation: Escalation) {
+    @discardableResult
+    private func deliverQuickPanic(_ panic: OwnPanic) async -> PanicDelivery {
+        lastPanic = panic
+        selectedEscalation = panic.escalation
+        isPanicTriggered = true
+        // A panic has to get out even if iOS would suspend the app meanwhile.
+        let application = UIApplication.shared
+        let backgroundTask = application.beginBackgroundTask(withName: "Send panic", expirationHandler: nil)
+        defer { application.endBackgroundTask(backgroundTask) }
+        await send(panic, attempts: Self.quickPanicAttempts)
+        // On screen, the panic screen says how it went.
+        if application.applicationState == .background {
+            notifications.postOwnPanic(panic, delivery: panicDelivery, discreet: discreetMode)
+        }
+        return panicDelivery
+    }
+
+    private func send(_ panic: OwnPanic, attempts: Int = 1) async {
         let recipients = friends
         guard !recipients.isEmpty else {
             panicDelivery = .noBuddies
@@ -316,22 +355,27 @@ final class ArielModel {
         panicDelivery = .sending
         let relay = relay
         let myId = myId
-        Task {
+        for attempt in 1...attempts {
             do {
-                try await relay.sendPanic(senderId: myId, eventId: eventId, escalation: escalation, recipientIds: recipients)
+                try await relay.sendPanic(
+                    senderId: myId, eventId: panic.eventId, escalation: panic.escalation, recipientIds: recipients
+                )
                 noteRelaySuccess()
                 if panicDelivery == .sending { panicDelivery = .sent }
+                return
             } catch {
                 noteRelayFailure(error)
-                if panicDelivery == .sending { panicDelivery = .failed(eventId: eventId, escalation: escalation) }
+                if attempt < attempts { try? await Task.sleep(for: .seconds(1)) }
             }
         }
+        if panicDelivery == .sending { panicDelivery = .failed(eventId: panic.eventId, escalation: panic.escalation) }
     }
 
     func resetPanic() {
         isPanicTriggered = false
         panicDelivery = .idle
         selectedEscalation = .generic
+        lastPanic = nil
     }
 
     // MARK: - Incoming events

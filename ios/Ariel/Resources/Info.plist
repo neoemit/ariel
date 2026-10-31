@@ -67,6 +67,39 @@
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).panic.MEDICAL</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Medical</string>
+			<key>UIApplicationShortcutItemSubtitle</key>
+			<string>Alerts your buddies now</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>cross.case.fill</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).panic.GENERIC</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Generic</string>
+			<key>UIApplicationShortcutItemSubtitle</key>
+			<string>Alerts your buddies now</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>light.beacon.max.fill</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).panic.ARMED</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Armed</string>
+			<key>UIApplicationShortcutItemSubtitle</key>
+			<string>Alerts your buddies now</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>exclamationmark.shield.fill</string>
+		</dict>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

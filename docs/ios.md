@@ -79,14 +79,14 @@ ios/
 │   ├── PersonalTeam.entitlements# empty: free-team builds
 │   └── stamp-version.sh         # build phase: version from app/build.gradle.kts
 ├── Ariel/
-│   ├── App/               # entry point, AppDelegate (notifications, APNs), background refresh
+│   ├── App/               # entry point, AppDelegate (notifications, APNs), quick actions, background refresh
 │   ├── Core/              # Foundation only: relay client, protocol, presence logic, preferences, ntfy topics
 │   ├── Services/          # ArielModel (state), siren, local notifications, Firebase, Keychain
-│   ├── Intents/           # "Send Panic Alert" for Shortcuts, Siri and the Action Button
+│   ├── Intents/           # "Send Panic Alert" for Shortcuts, Siri and the Action Button, and the widget's buttons
 │   ├── UI/                # Panic, Pairing and Settings screens, incoming alert, QR codes
 │   └── Resources/         # Info.plist, entitlements, assets, siren.wav (+ your GoogleService-Info.plist)
-├── ArielWidget/           # Home Screen and Lock Screen panic button
-├── Shared/                # code compiled into both the app and the widget (ariel:// links, which ntfy notifications open too)
+├── ArielWidget/           # Home Screen and Lock Screen panic buttons
+├── Shared/                # code compiled into both the app and the widget: alert types, the widget's intent, ariel:// links (which ntfy notifications open too)
 └── ArielTests/            # unit tests (the Core layer)
 ```
 
@@ -250,8 +250,16 @@ and its device cannot be reached, the Mac shows a notification. It logs to
   the sound; mute them with Focus or the Ring/Silent switch.
 - **Notifications show the buddy ID**, not your nickname for them, when they come by push or ntfy (the
   relay does not know nicknames). Inside the app, nicknames are used.
-- **Widget**: Home Screen (small) and Lock Screen (circular). Tapping it opens Ariel, which sends a
-  generic panic straight away, like Android's one-tap widget.
+- **Widget**: Medical, Generic and Armed buttons, as on Android: Home Screen (small and medium) and Lock
+  Screen (rectangular); the Lock Screen's circle only has room for Generic. A tap sends that alert with
+  no confirmation and without opening Ariel, **on the Lock Screen without unlocking too**. iOS launches
+  the app in the background for it (`WidgetPanicIntent`), so the widget needs no App Group and works in
+  free-team builds. Up to three attempts reach the relay, then a notification says how it went; tapping
+  one that failed sends the panic again. With notifications off, a widget's tap gives no sign either way.
+- **Holding Ariel's icon** offers the same three (Home Screen quick actions). iOS always opens the app
+  for these, so it shows the panic going out. It sends without the 1.5-second hold or a confirmation.
+- **A second tap**: the same button within 30 seconds is the same panic, and alerts nobody again. Another
+  alert type, or the same one later, is a new panic.
 - **Shortcuts, Siri and the Action Button**: *Send Panic Alert*, with a choice of alert type.
   Settings › Action Button › Shortcut › Ariel turns the Action Button into a panic button.
 - **Identity**: the buddy ID (`User_1234`) and the ntfy topic are kept in the Keychain too, so

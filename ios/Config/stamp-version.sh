@@ -2,7 +2,8 @@
 # Xcode build phase: sets the built bundle's version from the Android app's, so both platforms
 # always ship the same one. app/build.gradle.kts has `val appVersionMinor = N`, which makes
 # versionName 1.N and versionCode N; here that is CFBundleShortVersionString 1.N and
-# CFBundleVersion N.
+# CFBundleVersion N. The phases list the built Info.plist as an input: without that, Xcode can write
+# it after this has run, which puts back the 1.0 (1) of Base.xcconfig.
 set -eu
 
 GRADLE="${SRCROOT}/../app/build.gradle.kts"

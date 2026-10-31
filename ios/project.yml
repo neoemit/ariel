@@ -71,6 +71,8 @@ targets:
           fi
       - name: Stamp version
         basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
         script: |
           "${SRCROOT}/Config/stamp-version.sh"
   ArielWidget:
@@ -90,6 +92,8 @@ targets:
     postBuildScripts:
       - name: Stamp version
         basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)
         script: |
           "${SRCROOT}/Config/stamp-version.sh"
   ArielTests:

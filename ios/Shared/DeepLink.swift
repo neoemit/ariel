@@ -1,7 +1,7 @@
 import Foundation
 
-/// `ariel://` links: the widget's button, anything else that wants to raise a panic, and tapping a
-/// notification in the ntfy app (backend/app/main.py).
+/// `ariel://` links: anything that wants to raise a panic, and tapping a notification in the ntfy app
+/// (backend/app/main.py).
 ///
 ///   ariel://panic                  sends a generic panic straight away
 ///   ariel://panic?type=MEDICAL     with an escalation (GENERIC, MEDICAL or ARMED)
@@ -13,8 +13,6 @@ enum DeepLink: Equatable {
     case panic(escalationType: String?)
     case alert(eventId: String)
     case home
-
-    static let panicURL = URL(string: "\(scheme)://panic")!
 
     init?(url: URL) {
         guard url.scheme?.lowercased() == Self.scheme else { return nil }

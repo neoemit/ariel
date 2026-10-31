@@ -4,7 +4,7 @@ Ariel is an experimental Android and iOS app designed for emergency situations. 
 
 ## Features
 - **1.5-Second Panic**: Hold the panic button for 1.5 seconds to trigger.
-- **Home Widget**: One-tap immediate panic button.
+- **Home Widget**: One tap on Medical, Generic or Armed sends that alert straight away.
 - **Loud Alarm**: Plays even if the phone is in Silent or Do Not Disturb (DND) mode.
 - **Multi-Path Connectivity**: Uses Nearby (Bluetooth & WiFi) plus internet relay push notifications, and [ntfy](#iphone-notifications-through-ntfy) on iPhones without push.
 - **Escalation Modes**: Generic, medical, and armed-response context payloads.
@@ -24,6 +24,13 @@ scripts/ios-renew.sh schedule  # keep free-team builds signed past their 7 days
 Free-team builds cannot have Ariel's own push: alerts reach them through the ntfy app, once it is
 [set up](#iphone-notifications-through-ntfy), and while Ariel is open (the app polls the relay).
 Everything else, including push setup, is in [docs/ios.md](docs/ios.md).
+
+Two ways to send without the 1.5-second hold, and neither asks for confirmation:
+
+- **The widget** on the Home Screen or Lock Screen shows Medical, Generic and Armed, as on Android. A
+  tap sends that alert without opening Ariel, and a notification says whether it went out.
+- **Holding Ariel's icon** offers the same three. iOS always opens the app for these, and it sends
+  straight away and shows how it went.
 
 ## iPhone notifications through ntfy
 An iPhone only gets Ariel's own push from a build signed by a paid Apple Developer team. Without one,
