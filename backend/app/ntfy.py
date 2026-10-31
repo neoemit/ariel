@@ -63,6 +63,9 @@ PUBLISH_ATTEMPTS = 3
 # The notification waits for the upstream server to answer, so it does not get long.
 UPSTREAM_OPEN_TIMEOUT_SECONDS = 2.0
 
+# Cloudflare in front of an ntfy server refuses urllib's default User-Agent ("error code: 1010").
+USER_AGENT = "Ariel-relay"
+
 _GENERATED_TOPIC_ALPHABET = string.ascii_letters + string.digits
 
 _UPSTREAM_OFF = {"off", "none", "no", "false", "0"}
@@ -150,7 +153,7 @@ def upstream_topic(topic: str) -> str:
 
 
 def _upstream_headers() -> dict:
-    return {"User-Agent": "Ariel-relay"}
+    return {"User-Agent": USER_AGENT}
 
 
 class _PollRequestWatch:
@@ -340,7 +343,7 @@ def _publish(
     if click:
         body["click"] = click
 
-    headers = {"Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
     auth = _auth_header()
     if auth:
         headers["Authorization"] = auth

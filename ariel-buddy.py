@@ -140,7 +140,8 @@ def relay_post(path, body):
     request = urllib.request.Request(
         relay_url() + path,
         data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        # Cloudflare in front of a relay refuses urllib's default User-Agent ("error code: 1010").
+        headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "ariel-buddy"},
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=10) as response:

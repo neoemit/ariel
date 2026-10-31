@@ -334,6 +334,22 @@ def test_publish_posts_json_with_bearer_auth(ntfy_env, monkeypatch):
     assert captured["body"] == {"topic": "ariel_two", "title": "ARIEL 🚨", "message": "Zoë", "priority": 5, "tags": ["x"]}
 
 
+def test_publish_does_not_send_urllibs_default_user_agent(ntfy_env, monkeypatch):
+    # Cloudflare answers that one with a 403 before the request reaches ntfy.
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["agent"] = request.get_header("User-agent")
+        return FakeResponse()
+
+    ntfy = ntfy_env.main.ntfy
+    monkeypatch.setattr(ntfy.urllib.request, "urlopen", fake_urlopen)
+
+    assert ntfy.publish(topic="ariel_two", title="ARIEL", message="x", tags=[], priority=5) is True
+
+    assert captured["agent"] == "Ariel-relay"
+
+
 def test_publish_can_use_a_username_and_password(ntfy_env, monkeypatch):
     monkeypatch.delenv("NTFY_TOKEN")
     monkeypatch.setenv("NTFY_USERNAME", "ariel-publisher")
