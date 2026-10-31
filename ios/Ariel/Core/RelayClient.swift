@@ -57,10 +57,17 @@ struct RelayClient: Sendable {
         return Set(response.onlineBuddyIds.map(\.trimmed).filter { !$0.isEmpty })
     }
 
-    func sendPanic(senderId: String, eventId: String, escalation: Escalation, recipientIds: [String]) async throws {
-        try await post("/v1/panic", PanicBody(
+    /// Hands a panic to the relay. Returns the buddies nothing could alert: no push went through to them
+    /// (the relay may have no Firebase credentials) and they have no ntfy topic. A relay too old to say
+    /// returns none.
+    @discardableResult
+    func sendPanic(senderId: String, eventId: String, escalation: Escalation, recipientIds: [String]) async throws -> [String] {
+        let data = try await post("/v1/panic", PanicBody(
             senderId: senderId, eventId: eventId, escalationType: escalation.rawValue, recipientIds: recipientIds
         ))
+        // The relay took the panic: an answer it cannot read must not make the app send it again.
+        let response = try? JSONDecoder().decode(PanicResponse.self, from: data)
+        return (response?.unreachedRecipientIds ?? []).map(\.trimmed).filter { !$0.isEmpty }
     }
 
     /// Tells `senderId`, who raised the panic `eventId`, that this buddy is coming.
@@ -174,6 +181,10 @@ private struct PanicBody: Encodable {
     let eventId: String
     let escalationType: String
     let recipientIds: [String]
+}
+
+private struct PanicResponse: Decodable {
+    let unreachedRecipientIds: [String]?
 }
 
 private struct AckBody: Encodable {

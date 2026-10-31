@@ -38,6 +38,8 @@ def test_panic_without_firebase_is_queued_for_polling(relay):
     response = panic(relay).json()
 
     assert response["status"] == "queued"
+    # Without Firebase nothing alerts the buddy: the sender has to know.
+    assert response["unreachedRecipientIds"] == ["User_2222"]
     events = relay.post("/v1/events", json={"buddyId": "User_2222"}).json()
     assert [(e["type"], e["senderId"], e["eventId"], e["escalationType"]) for e in events["events"]] == [
         ("panic", "User_1111", "event-1", "MEDICAL")
@@ -96,3 +98,25 @@ def test_push_carries_data_and_an_ios_alert(relay, monkeypatch):
     assert aps.sound == "siren.wav"
     assert aps.category == "PANIC"
     assert message.apns.headers["apns-push-type"] == "alert"
+
+
+def test_panic_names_the_buddies_no_push_reached(relay, monkeypatch):
+    monkeypatch.setattr(relay.main, "is_firebase_ready", lambda: True)
+    relay.post("/v1/register-device", json={"buddyId": "User_2222", "token": "t" * 32, "platform": "android"})
+
+    response = panic(relay, recipients=("User_2222", "User_3333")).json()
+
+    assert response["status"] == "sent"
+    assert response["deliveredTokens"] == 1
+    assert response["unreachedRecipientIds"] == ["User_3333"]
+
+
+def test_a_failed_push_leaves_the_buddy_unreached(relay, monkeypatch):
+    monkeypatch.setattr(relay.main, "is_firebase_ready", lambda: True)
+    monkeypatch.setattr(relay.main, "send_data_message", lambda token, data: False)
+    relay.post("/v1/register-device", json={"buddyId": "User_2222", "token": "t" * 32})
+
+    response = panic(relay).json()
+
+    assert response["attemptedTokens"] == 1
+    assert response["unreachedRecipientIds"] == ["User_2222"]

@@ -74,6 +74,20 @@ final class RelayClientTests: XCTestCase {
         XCTAssertEqual(transport.lastBody["recipientIds"] as? [String], ["User_2"])
     }
 
+    func testPanicReturnsTheBuddiesNothingAlerted() async throws {
+        transport.response = Data(#"{"status":"queued","deliveredTokens":0,"unreachedRecipientIds":["User_2"]}"#.utf8)
+        let unreached = try await client.sendPanic(
+            senderId: "User_1", eventId: "e1", escalation: .generic, recipientIds: ["User_2", "User_3"]
+        )
+        XCTAssertEqual(unreached, ["User_2"])
+    }
+
+    func testPanicToAnOlderRelayReachesEveryone() async throws {
+        transport.response = Data(#"{"status":"sent","deliveredTokens":1}"#.utf8)
+        let unreached = try await client.sendPanic(senderId: "User_1", eventId: "e1", escalation: .generic, recipientIds: ["User_2"])
+        XCTAssertEqual(unreached, [])
+    }
+
     func testAcknowledgment() async throws {
         try await client.sendAcknowledgment(senderId: "User_2", acknowledgerId: "User_1", eventId: "e1")
         XCTAssertEqual(transport.lastPath, "/v1/ack")

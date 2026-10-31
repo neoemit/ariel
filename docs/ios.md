@@ -302,6 +302,7 @@ it. On the Simulator, use *Enter buddy ID* as there is no camera.
 | *Failed to register bundle identifier* | Another team owns the bundle id: set `APP_BUNDLE_ID` in `Local.xcconfig` (and register that id in Firebase for push). |
 | iOS buddies always show offline | The relay is older than the iOS app: redeploy it from this repository. |
 | No alerts in an in-app build | Ariel must be open. Check Settings › Internet relay › Test connection, and that the relay has `/v1/events` (`ARIEL_RELAY_URL=… scripts/ios-check-env.sh`). |
+| Android buddies get nothing from the iPhone's panic; the panic screen says *The relay could not alert …* | iPhones reach Android only through the relay's Firebase push (Nearby is Android-only). `curl https://<relay>/health` must say `"firebaseReady": true`: put the service account JSON of the Android app's Firebase project in `backend/secrets/firebase-service-account.json` and run `docker compose up -d --force-recreate ariel-relay`. |
 | No push notifications | Push build? (Settings › Notifications › Delivery says *Push notifications*.) Notifications allowed? `GoogleService-Info.plist` bundle id equals `APP_BUNDLE_ID`? APNs key uploaded to the **same** Firebase project as the relay's service account? `docker compose logs ariel-relay` shows delivery failures. |
 
 ---

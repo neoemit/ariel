@@ -158,15 +158,15 @@ private struct PanicSentView: View {
                 Label("The relay could not be reached, so your buddies may not know.", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(Color.arielRed)
                     .multilineTextAlignment(.center)
-                Button {
-                    model.retryPanic()
-                } label: {
-                    Text("TRY AGAIN")
-                        .bold()
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.arielRed)
+                RetryPanicButton()
+            case .undelivered:
+                Label(
+                    "The relay could not alert \(model.unreachedNames ?? "some buddies"), so they may not know.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .foregroundStyle(Color.arielRed)
+                .multilineTextAlignment(.center)
+                RetryPanicButton()
             case .noBuddies:
                 Text("Your panic pool is empty: add buddies on the Pairing tab first.")
                     .foregroundStyle(Color.arielOnSurfaceVariant)
@@ -183,6 +183,22 @@ private struct PanicSentView: View {
             .padding(.top, 16)
         }
         .frame(maxWidth: 320)
+    }
+}
+
+private struct RetryPanicButton: View {
+    @Environment(ArielModel.self) private var model
+
+    var body: some View {
+        Button {
+            model.retryPanic()
+        } label: {
+            Text("TRY AGAIN")
+                .bold()
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(.arielRed)
     }
 }
 

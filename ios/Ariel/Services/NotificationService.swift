@@ -62,7 +62,7 @@ final class NotificationService {
 
     /// How a panic sent from the widget went, as it has no screen to say so. Success makes no sound: it
     /// could give someone away. Tapping a failure sends the panic again.
-    func postOwnPanic(_ panic: OwnPanic, delivery: PanicDelivery, discreet: Bool) {
+    func postOwnPanic(_ panic: OwnPanic, delivery: PanicDelivery, unreachedNames: String?, discreet: Bool) {
         let content = UNMutableNotificationContent()
         switch delivery {
         case .sent:
@@ -71,6 +71,10 @@ final class NotificationService {
         case .failed:
             content.title = "Panic alert NOT sent"
             content.body = "The relay could not be reached, so your buddies may not know. Tap to try again."
+            content.userInfo = panic.retryUserInfo
+        case .undelivered:
+            content.title = "Panic alert NOT delivered to everyone"
+            content.body = "The relay could not alert \(unreachedNames ?? "some buddies"), so they may not know. Tap to try again."
             content.userInfo = panic.retryUserInfo
         case .noBuddies:
             content.title = "Panic alert NOT sent"

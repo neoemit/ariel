@@ -32,8 +32,21 @@ enum PanicDelivery: Equatable, Sendable {
     case sent
     /// The relay could not be reached; `retry` sends the same event again.
     case failed(eventId: String, escalation: Escalation)
+    /// The relay took it, but had no way to alert these buddies (no push went through, no ntfy topic):
+    /// they may not know. `retry` sends the same event again.
+    case undelivered(eventId: String, escalation: Escalation, buddyIds: [String])
     /// There is nobody to send it to.
     case noBuddies
+
+    /// The panic to send again, with its event ID, when it did not get to everyone.
+    var panicToRetry: OwnPanic? {
+        switch self {
+        case .failed(let eventId, let escalation), .undelivered(let eventId, let escalation, _):
+            OwnPanic(eventId: eventId, escalation: escalation)
+        case .idle, .sending, .sent, .noBuddies:
+            nil
+        }
+    }
 }
 
 /// The app's state and behaviour: the iOS counterpart of Android's PanicViewModel and SirenService
@@ -161,6 +174,11 @@ final class ArielModel {
 
     func displayName(for id: String) -> String {
         nicknames[id]?.trimmed.nonEmpty ?? id
+    }
+
+    /// "Alice and User_1234".
+    func displayNames(for ids: [String]) -> String {
+        ListFormatter.localizedString(byJoining: ids.map(displayName(for:)))
     }
 
     // MARK: - Lifecycle
@@ -311,7 +329,7 @@ final class ArielModel {
     @discardableResult
     func sendQuickPanic(_ escalation: Escalation) async -> PanicDelivery {
         if let lastPanic, lastPanic.isRepeated(by: escalation, at: Date()) {
-            guard case .failed = panicDelivery else { return panicDelivery }
+            guard panicDelivery.panicToRetry != nil else { return panicDelivery }
             return await deliverQuickPanic(lastPanic)
         }
         return await deliverQuickPanic(OwnPanic(escalation: escalation))
@@ -322,11 +340,11 @@ final class ArielModel {
         await deliverQuickPanic(panic)
     }
 
-    /// Sends a panic that could not reach the relay again, with the same event ID, so a buddy who did get
-    /// it is not alerted twice.
+    /// Sends a panic that did not reach everyone again, with the same event ID, so a buddy who did get it
+    /// is not alerted twice.
     func retryPanic() {
-        guard case .failed(let eventId, let escalation) = panicDelivery else { return }
-        Task { await send(OwnPanic(eventId: eventId, escalation: escalation)) }
+        guard let panic = panicDelivery.panicToRetry else { return }
+        Task { await send(panic) }
     }
 
     @discardableResult
@@ -341,7 +359,7 @@ final class ArielModel {
         await send(panic, attempts: Self.quickPanicAttempts)
         // On screen, the panic screen says how it went.
         if application.applicationState == .background {
-            notifications.postOwnPanic(panic, delivery: panicDelivery, discreet: discreetMode)
+            notifications.postOwnPanic(panic, delivery: panicDelivery, unreachedNames: unreachedNames, discreet: discreetMode)
         }
         return panicDelivery
     }
@@ -357,11 +375,16 @@ final class ArielModel {
         let myId = myId
         for attempt in 1...attempts {
             do {
-                try await relay.sendPanic(
+                let unreached = try await relay.sendPanic(
                     senderId: myId, eventId: panic.eventId, escalation: panic.escalation, recipientIds: recipients
                 )
                 noteRelaySuccess()
-                if panicDelivery == .sending { panicDelivery = .sent }
+                // The relay answered: sending again straight away would not reach them either.
+                if panicDelivery == .sending {
+                    panicDelivery = unreached.isEmpty
+                        ? .sent
+                        : .undelivered(eventId: panic.eventId, escalation: panic.escalation, buddyIds: unreached)
+                }
                 return
             } catch {
                 noteRelayFailure(error)
@@ -369,6 +392,12 @@ final class ArielModel {
             }
         }
         if panicDelivery == .sending { panicDelivery = .failed(eventId: panic.eventId, escalation: panic.escalation) }
+    }
+
+    /// The buddies the relay could not alert about this device's panic, for the panic screen.
+    var unreachedNames: String? {
+        guard case .undelivered(_, _, let ids) = panicDelivery else { return nil }
+        return displayNames(for: ids)
     }
 
     func resetPanic() {

@@ -139,6 +139,8 @@ def test_everyone_in_the_pool_gets_the_same_panic_notification(ntfy_env, publish
     # The sender is not alerted about its own panic.
     assert {call["topic"] for call in published} == {"ariel_two", "ariel_three"}
     assert response["ntfyTopics"] == 2
+    # ntfy alerts them even without Firebase.
+    assert response["unreachedRecipientIds"] == []
     for call in published:
         assert {key: value for key, value in call.items() if key != "topic"} == {
             "title": "ARIEL PANIC ALERT 🚑",
