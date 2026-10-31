@@ -7,6 +7,21 @@ services:
     environment:
       ARIEL_DB_PATH: /data/ariel.db
       FIREBASE_CREDENTIALS_PATH: /run/secrets/firebase-service-account.json
+      # ntfy, for iPhones without push: see the README. Leave NTFY_BASE_URL empty to disable it.
+      # NTFY_BASE_URL is how this container reaches ntfy; NTFY_PUBLIC_URL is what phones subscribe
+      # to (defaults to the former).
+      NTFY_BASE_URL: "${NTFY_BASE_URL:-}"
+      NTFY_PUBLIC_URL: "${NTFY_PUBLIC_URL:-}"
+      # An access token of a user that can write ariel_* topics, or its username and password.
+      NTFY_TOKEN: "${NTFY_TOKEN:-}"
+      NTFY_USERNAME: "${NTFY_USERNAME:-}"
+      NTFY_PASSWORD: "${NTFY_PASSWORD:-}"
+      NTFY_TIMEOUT_SECONDS: "${NTFY_TIMEOUT_SECONDS:-5}"
+      # iOS delivery check: the relay makes sure every poll request reaches ntfy.sh, sending it
+      # itself if the ntfy server's did not. "off" disables it.
+      NTFY_UPSTREAM_URL: "${NTFY_UPSTREAM_URL:-}"
+      NTFY_UPSTREAM_TOKEN: "${NTFY_UPSTREAM_TOKEN:-}"
+      NTFY_UPSTREAM_WAIT_SECONDS: "${NTFY_UPSTREAM_WAIT_SECONDS:-15}"
     ports:
       - "8001:8001"
     volumes:

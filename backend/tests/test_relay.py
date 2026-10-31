@@ -5,30 +5,6 @@
 
 from __future__ import annotations
 
-import importlib
-import os
-import sys
-
-import pytest
-from fastapi.testclient import TestClient
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-
-@pytest.fixture()
-def relay(tmp_path, monkeypatch):
-    monkeypatch.setenv("ARIEL_DB_PATH", str(tmp_path / "ariel.db"))
-    monkeypatch.setenv("FIREBASE_CREDENTIALS_PATH", str(tmp_path / "missing.json"))
-    import app.main as main
-
-    main = importlib.reload(main)
-    sent = []
-    monkeypatch.setattr(main.messaging, "send", lambda message: sent.append(message))
-    with TestClient(main.app) as client:
-        client.sent = sent
-        client.main = main
-        yield client
-
 
 def panic(client, sender="User_1111", recipients=("User_2222",), event_id="event-1", escalation="MEDICAL"):
     return client.post(

@@ -5,13 +5,17 @@ import os
 import json
 import sqlite3
 import time
+import urllib.parse
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Sequence
 
 import firebase_admin
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from firebase_admin import credentials, initialize_app, messaging
 from pydantic import BaseModel, Field
+
+from app import ntfy
 
 LOGGER = logging.getLogger("ariel-relay")
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -32,6 +36,10 @@ ESCALATION_ALERT_TEXT = {
     "MEDICAL": ("🚑", "{name} requires medical assistance."),
     "ARMED": ("🔫", "{name} is in danger and requires armed response."),
 }
+# A slow ntfy server must not hold up the panic's other recipients, FCM or the sender's request.
+NTFY_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="ntfy")
+# Anyone can reach the relay: enough for a person's devices, not to flood the ntfy server through it.
+MAX_NTFY_TOPICS_PER_BUDDY = 5
 
 app = FastAPI(title="Ariel Relay API", version="1.0.0")
 
@@ -73,6 +81,16 @@ class PresenceRequest(BaseModel):
     staleAfterSeconds: int = Field(default=180, ge=30, le=3600)
 
 
+class NtfySubscribeRequest(BaseModel):
+    buddyId: str = Field(..., min_length=1, max_length=128)
+    topic: str | None = Field(default=None, max_length=64)
+
+
+class NtfyTopicRequest(BaseModel):
+    buddyId: str = Field(..., min_length=1, max_length=128)
+    topic: str = Field(..., min_length=1, max_length=64)
+
+
 def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -111,6 +129,20 @@ def initialize_database() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_events_recipient
             ON events (recipient_id, id);
+
+            CREATE TABLE IF NOT EXISTS ntfy_topics (
+                buddy_id TEXT NOT NULL,
+                topic TEXT NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (buddy_id, topic)
+            );
+
+            CREATE TABLE IF NOT EXISTS ntfy_deliveries (
+                delivery_key TEXT NOT NULL,
+                topic TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY (delivery_key, topic)
+            );
             """
         )
 
@@ -182,6 +214,10 @@ def store_events(recipient_ids: Sequence[str], payload: Dict[str, str]) -> None:
         )
         conn.execute(
             "DELETE FROM events WHERE created_at < ?",
+            (timestamp - EVENT_RETENTION_SECONDS,),
+        )
+        conn.execute(
+            "DELETE FROM ntfy_deliveries WHERE created_at < ?",
             (timestamp - EVENT_RETENTION_SECONDS,),
         )
 
@@ -277,30 +313,119 @@ def get_presence_for_buddies(
     return presence
 
 
-def build_apns_config(data: Dict[str, str]) -> messaging.APNSConfig:
-    """The visible alert iOS shows. Android ignores it and keeps receiving a data-only message."""
+def add_ntfy_topic(buddy_id: str, topic: str) -> bool:
+    """Attaches a topic to a buddy; false when the buddy has too many already."""
+    timestamp = int(time.time())
+    with get_connection() as conn:
+        updated = conn.execute(
+            "UPDATE ntfy_topics SET updated_at = ? WHERE buddy_id = ? AND topic = ?",
+            (timestamp, buddy_id, topic),
+        )
+        if updated.rowcount:
+            return True
+        count = conn.execute("SELECT COUNT(*) FROM ntfy_topics WHERE buddy_id = ?", (buddy_id,)).fetchone()[0]
+        if count >= MAX_NTFY_TOPICS_PER_BUDDY:
+            return False
+        conn.execute(
+            "INSERT INTO ntfy_topics (buddy_id, topic, updated_at) VALUES (?, ?, ?)",
+            (buddy_id, topic, timestamp),
+        )
+    return True
+
+
+def remove_ntfy_topic(buddy_id: str, topic: str) -> None:
+    with get_connection() as conn:
+        conn.execute("DELETE FROM ntfy_topics WHERE buddy_id = ? AND topic = ?", (buddy_id, topic))
+
+
+def has_ntfy_topic(buddy_id: str, topic: str) -> bool:
+    with get_connection() as conn:
+        row = conn.execute("SELECT 1 FROM ntfy_topics WHERE buddy_id = ? AND topic = ?", (buddy_id, topic)).fetchone()
+    return row is not None
+
+
+def get_ntfy_topics(buddy_ids: Sequence[str]) -> List[str]:
+    """The topics of these buddies, each once: buddies may share one (one person's devices, say)."""
+    if not buddy_ids:
+        return []
+    placeholders = ",".join("?" for _ in buddy_ids)
+    sql = f"SELECT DISTINCT topic FROM ntfy_topics WHERE buddy_id IN ({placeholders}) ORDER BY topic"
+    with get_connection() as conn:
+        rows = conn.execute(sql, tuple(buddy_ids)).fetchall()
+    return [str(row["topic"]) for row in rows]
+
+
+def claim_ntfy_delivery(delivery_key: str, topic: str) -> bool:
+    """Whether this alert is still to be published to this topic.
+
+    Clients resend a panic or acknowledgment whose answer got lost, with the same event ID, so that
+    nobody is alerted twice. Ariel recognises those itself; the ntfy app cannot, so the relay does.
+    """
+    with get_connection() as conn:
+        inserted = conn.execute(
+            "INSERT OR IGNORE INTO ntfy_deliveries (delivery_key, topic, created_at) VALUES (?, ?, ?)",
+            (delivery_key, topic, int(time.time())),
+        )
+    return inserted.rowcount == 1
+
+
+def release_ntfy_delivery(delivery_key: str, topic: str) -> None:
+    with get_connection() as conn:
+        conn.execute("DELETE FROM ntfy_deliveries WHERE delivery_key = ? AND topic = ?", (delivery_key, topic))
+
+
+def alert_text(data: Dict[str, str]) -> tuple[str, str]:
+    """The title and body of an alert: the same for everyone it goes to, on every channel."""
     if data.get("type") == "panic":
         emoji, body = ESCALATION_ALERT_TEXT.get(
             data.get("escalationType", "GENERIC"), ESCALATION_ALERT_TEXT["GENERIC"]
         )
-        alert = messaging.ApsAlert(
-            title=f"ARIEL PANIC ALERT {emoji}",
-            body=body.format(name=data.get("senderId", "A buddy")),
-        )
-        category = "PANIC"
+        return f"ARIEL PANIC ALERT {emoji}", body.format(name=data.get("senderId", "A buddy"))
+    return "Help is on the way!", f"{data.get('acknowledgerId', 'A buddy')} has acknowledged your alert."
+
+
+def deliver_to_ntfy(topic: str, delivery_key: str, fields: Dict[str, object]) -> None:
+    if ntfy.publish(topic=topic, **fields):
+        return
+    # A resend of this event can try again.
+    release_ntfy_delivery(delivery_key, topic)
+    LOGGER.warning("event=ntfy_failed deliveryKey=%s topic=%s", delivery_key, topic)
+
+
+def notify_ntfy(recipient_ids: Sequence[str], data: Dict[str, str]) -> int:
+    """Publishes an alert to the ntfy topics of these buddies, the same notification on each. Returns
+    how many topics it went out to; the publishing itself carries on in the background."""
+    if not ntfy.is_enabled():
+        return 0
+    title, message = alert_text(data)
+    if data.get("type") == "panic":
+        delivery_key = f"panic:{data['eventId']}"
+        fields = {
+            "priority": ntfy.PRIORITY_MAX,
+            # The ntfy app can only show the alert: this link opens it in Ariel, to answer it.
+            "click": "ariel://alert?event=" + urllib.parse.quote(data["eventId"], safe=""),
+        }
     else:
-        alert = messaging.ApsAlert(
-            title="Help is on the way!",
-            body=f"{data.get('acknowledgerId', 'A buddy')} has acknowledged your alert.",
-        )
-        category = "ACK"
+        delivery_key = f"ack:{data['acknowledgerId']}:{data['eventId']}"
+        fields = {"priority": ntfy.PRIORITY_HIGH, "tags": ["white_check_mark"], "click": "ariel://home"}
+    fields.update(title=title, message=message)
+
+    topics = [topic for topic in get_ntfy_topics(recipient_ids) if claim_ntfy_delivery(delivery_key, topic)]
+    for topic in topics:
+        NTFY_POOL.submit(deliver_to_ntfy, topic, delivery_key, fields)
+    return len(topics)
+
+
+def build_apns_config(data: Dict[str, str]) -> messaging.APNSConfig:
+    """The visible alert iOS shows. Android ignores it and keeps receiving a data-only message."""
+    title, body = alert_text(data)
     return messaging.APNSConfig(
         headers={"apns-priority": "10", "apns-push-type": "alert"},
         payload=messaging.APNSPayload(
             aps=messaging.Aps(
-                alert=alert,
+                alert=messaging.ApsAlert(title=title, body=body),
                 sound=APNS_ALERT_SOUND,
-                category=category,
+                category="PANIC" if data.get("type") == "panic" else "ACK",
                 thread_id=data.get("eventId"),
                 custom_data={"interruption-level": "time-sensitive"},
             )
@@ -340,8 +465,13 @@ def on_startup() -> None:
 
 
 @app.get("/health")
-def health() -> Dict[str, str | bool]:
-    return {"status": "ok", "firebaseReady": is_firebase_ready()}
+def health() -> Dict[str, str | bool | None]:
+    return {
+        "status": "ok",
+        "firebaseReady": is_firebase_ready(),
+        "ntfyEnabled": ntfy.is_enabled(),
+        "ntfyServerUrl": ntfy.public_url() or None,
+    }
 
 
 @app.post("/v1/register-device")
@@ -409,6 +539,59 @@ def get_presence(request: PresenceRequest) -> Dict[str, int | str | List[str] | 
     }
 
 
+@app.post("/v1/ntfy/subscribe")
+def subscribe_ntfy(request: NtfySubscribeRequest) -> Dict[str, str]:
+    """Publish this buddy's alerts to a topic: the one given, or a new random one."""
+    require_ntfy()
+    topic = (request.topic or "").strip() or ntfy.generate_topic()
+    if not ntfy.is_valid_topic(topic):
+        raise HTTPException(
+            status_code=422,
+            detail=f"A topic is {ntfy.TOPIC_PREFIX} and then up to 58 letters, digits, '-' or '_'",
+        )
+    if not add_ntfy_topic(request.buddyId, topic):
+        raise HTTPException(status_code=403, detail="This buddy has too many ntfy topics")
+    LOGGER.info("event=ntfy_subscribe buddyId=%s", request.buddyId)
+    return {
+        "status": "ok",
+        "topic": topic,
+        "serverUrl": ntfy.public_url(),
+        "subscribeUrl": ntfy.subscribe_url(topic),
+    }
+
+
+@app.post("/v1/ntfy/unsubscribe")
+def unsubscribe_ntfy(request: NtfyTopicRequest) -> Dict[str, str]:
+    """Stops publishing to a topic. Taking one means knowing its name, which the relay never tells: a
+    stranger with a buddy ID cannot silently cut that buddy off from its alerts."""
+    remove_ntfy_topic(request.buddyId, request.topic)
+    LOGGER.info("event=ntfy_unsubscribe buddyId=%s", request.buddyId)
+    return {"status": "ok"}
+
+
+@app.post("/v1/ntfy/test")
+def test_ntfy(request: NtfyTopicRequest) -> Dict[str, str | bool]:
+    """Sends a test notification, at a panic's priority, and waits for the upstream check, so that the
+    answer also says whether the iPhone's wake-up (the poll request on ntfy.sh) went out."""
+    require_ntfy()
+    if not has_ntfy_topic(request.buddyId, request.topic):
+        raise HTTPException(status_code=404, detail="This topic is not attached to this buddy")
+    delivered, upstream = ntfy.publish_checked(
+        topic=request.topic,
+        title="Ariel test",
+        message="This is a test, not an emergency. Panics will look like this.",
+        tags=["white_check_mark"],
+        priority=ntfy.PRIORITY_MAX,
+        click="ariel://home",
+    )
+    return {"status": "ok", "delivered": delivered, "upstream": upstream}
+
+
+def require_ntfy() -> None:
+    if not ntfy.is_enabled():
+        raise HTTPException(status_code=409, detail="ntfy is not configured on this relay (NTFY_BASE_URL)")
+
+
 @app.post("/v1/panic")
 def send_panic(request: PanicRequest) -> Dict[str, int | str]:
     recipients = sorted({buddy_id for buddy_id in request.recipientIds if buddy_id and buddy_id != request.senderId})
@@ -418,6 +601,7 @@ def send_panic(request: PanicRequest) -> Dict[str, int | str]:
             "attemptedTokens": 0,
             "deliveredTokens": 0,
             "recipientCount": 0,
+            "ntfyTopics": 0,
         }
 
     payload = {
@@ -427,12 +611,14 @@ def send_panic(request: PanicRequest) -> Dict[str, int | str]:
         "escalationType": normalize_escalation(request.escalationType),
     }
     store_events(recipients, payload)
+    ntfy_topics = notify_ntfy(recipients, payload)
     if not is_firebase_ready():
         return {
             "status": "queued",
             "attemptedTokens": 0,
             "deliveredTokens": 0,
             "recipientCount": len(recipients),
+            "ntfyTopics": ntfy_topics,
         }
 
     tokens_by_buddy = get_tokens_for_buddies(recipients)
@@ -449,6 +635,7 @@ def send_panic(request: PanicRequest) -> Dict[str, int | str]:
         "attemptedTokens": attempted,
         "deliveredTokens": delivered,
         "recipientCount": len(recipients),
+        "ntfyTopics": ntfy_topics,
     }
 
 
@@ -460,8 +647,9 @@ def send_ack(request: AckRequest) -> Dict[str, int | str]:
         "eventId": request.eventId,
     }
     store_events([request.senderId], payload)
+    ntfy_topics = notify_ntfy([request.senderId], payload)
     if not is_firebase_ready():
-        return {"status": "queued", "attemptedTokens": 0, "deliveredTokens": 0}
+        return {"status": "queued", "attemptedTokens": 0, "deliveredTokens": 0, "ntfyTopics": ntfy_topics}
 
     tokens_by_buddy = get_tokens_for_buddies([request.senderId])
     tokens = tokens_by_buddy.get(request.senderId, [])
@@ -477,4 +665,5 @@ def send_ack(request: AckRequest) -> Dict[str, int | str]:
         "status": "sent",
         "attemptedTokens": attempted,
         "deliveredTokens": delivered,
+        "ntfyTopics": ntfy_topics,
     }
