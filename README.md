@@ -248,10 +248,11 @@ Required GitHub environment:
   - `ANDROID_KEY_PASSWORD`
 
 Required in Play Console:
-- **App content → Full-screen intent** has to be filled in. Google Play does not accept a build with the `USE_FULL_SCREEN_INTENT` permission without it.
+- **App content → Full-screen intent** has to be filled in (answered "Other"). Google Play does not accept a build with the `USE_FULL_SCREEN_INTENT` permission without it.
+- **App content → Privacy policy** points at `https://lmbdev.co.za/ariel/privacy-policy`, served from the `lmbdev-website` repo. Play checks that it answers, and it has to stay in step with **App content → Data safety**.
 
 Trigger options:
-- Manual: GitHub → **Actions** → **Play Internal Release** → **Run workflow**
+- Manual: GitHub → **Actions** → **Play Internal Release** → **Run workflow**. With `release_status` set to `draft` the release stops in Play Console instead of reaching testers. Use that when a new sensitive permission makes Play refuse the release: Play only offers the permission's declaration once a bundle carrying it exists.
 - Automatic: push to `main` when release-impacting files change:
   - `app/**`
   - `build.gradle.kts`, `settings.gradle.kts`, `gradle.properties`
