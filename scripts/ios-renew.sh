@@ -119,7 +119,7 @@ latest_main() {
 		log "GitHub cannot be reached; using ${commit[1,8]}"
 	fi
 	local numbers
-	numbers=$(ariel_version "$(git show $commit:app/build.gradle.kts 2>/dev/null)") ||
+	numbers=$(ariel_version "$(git show ${commit}:app/build.gradle.kts 2>/dev/null)") ||
 		fail "${commit[1,8]} has no usable appVersionMinor in app/build.gradle.kts"
 	version=${numbers% *}
 	build=${numbers#* }
