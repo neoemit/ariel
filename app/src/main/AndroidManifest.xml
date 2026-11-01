@@ -22,6 +22,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Puts a panic over the lock screen (IncomingAlertActivity). Google Play accepts builds with it
+         once Play Console › App content › Full-screen intent is filled in; on Android 14+ the user
+         may also have to allow it, which the app asks for. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <application
         android:allowBackup="true"
@@ -37,13 +41,25 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.Ariel">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+
+        <!-- Where the launcher shortcuts land (res/xml/shortcuts.xml). MainActivity has to be exported
+             for the launcher, so it only sends a panic when started through this: launchers can start
+             a shortcut's activity through the system, and no other app can. -->
+        <activity-alias
+            android:name=".QuickPanicAlias"
+            android:exported="false"
+            android:targetActivity=".MainActivity" />
 
         <activity
             android:name=".IncomingAlertActivity"

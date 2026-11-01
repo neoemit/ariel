@@ -31,6 +31,8 @@ struct RelayClient: Sendable {
     static let timeout: TimeInterval = 7
     /// The ntfy test waits for the relay to see the poll request on ntfy.sh (15 s by default).
     static let ntfyTestTimeout: TimeInterval = 35
+    /// A background transfer may have to bring the radio up, and nobody is waiting for it.
+    static let backgroundTimeout: TimeInterval = 60
 
     let baseURL: URL
     var appVersion: String?
@@ -46,6 +48,19 @@ struct RelayClient: Sendable {
     /// Marks this buddy online, for builds without push.
     func heartbeat(buddyId: String) async throws {
         try await post("/v1/heartbeat", HeartbeatBody(buddyId: buddyId, appVersion: appVersion, platform: Self.platform))
+    }
+
+    /// The same heartbeat as a request and a body kept apart, for a background session: iOS sends those
+    /// from a file, and by itself while Ariel is suspended.
+    func heartbeatUpload(buddyId: String) throws -> (request: URLRequest, body: Data) {
+        var request = try jsonRequest(
+            "/v1/heartbeat",
+            HeartbeatBody(buddyId: buddyId, appVersion: appVersion, platform: Self.platform),
+            timeout: Self.backgroundTimeout
+        )
+        let body = request.httpBody ?? Data()
+        request.httpBody = nil
+        return (request, body)
     }
 
     /// Which of these buddies were seen within `staleAfterSeconds`.
@@ -128,13 +143,18 @@ struct RelayClient: Sendable {
         URL(string: baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + path)!
     }
 
-    @discardableResult
-    private func post<Body: Encodable>(_ path: String, _ body: Body, timeout: TimeInterval = RelayClient.timeout) async throws -> Data {
+    private func jsonRequest<Body: Encodable>(_ path: String, _ body: Body, timeout: TimeInterval) throws -> URLRequest {
         var request = URLRequest(url: url(path), timeoutInterval: timeout)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = try JSONEncoder().encode(body)
+        return request
+    }
+
+    @discardableResult
+    private func post<Body: Encodable>(_ path: String, _ body: Body, timeout: TimeInterval = RelayClient.timeout) async throws -> Data {
+        let request = try jsonRequest(path, body, timeout: timeout)
         let (status, data) = try await transport.send(request)
         guard (200..<300).contains(status) else { throw RelayError.http(status) }
         return data

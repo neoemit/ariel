@@ -130,7 +130,8 @@ class PanicActionCallback : ActionCallback {
 
         val intent = Intent(context, SirenService::class.java).apply {
             action = "TRIGGER_PANIC"
-            putExtra("ESCALATION_TYPE", escalationType)
+            putExtra(SirenService.EXTRA_ESCALATION_TYPE, escalationType)
+            putExtra(SirenService.EXTRA_QUICK_PANIC, true)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(intent)

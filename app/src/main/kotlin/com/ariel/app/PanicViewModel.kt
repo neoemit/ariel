@@ -188,7 +188,18 @@ class PanicViewModel(application: Application) : AndroidViewModel(application) {
         _isPanicTriggered.value = true
         context.startService(Intent(context, SirenService::class.java).apply {
             action = "TRIGGER_PANIC"
-            putExtra("ESCALATION_TYPE", _selectedEscalation.value)
+            putExtra(SirenService.EXTRA_ESCALATION_TYPE, _selectedEscalation.value)
+        })
+    }
+
+    /** Sends a panic with no hold first: a launcher shortcut. */
+    fun triggerQuickPanic(escalationType: String) {
+        setEscalationMode(escalationType)
+        _isPanicTriggered.value = true
+        context.startService(Intent(context, SirenService::class.java).apply {
+            action = "TRIGGER_PANIC"
+            putExtra(SirenService.EXTRA_ESCALATION_TYPE, _selectedEscalation.value)
+            putExtra(SirenService.EXTRA_QUICK_PANIC, true)
         })
     }
 

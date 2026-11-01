@@ -7,6 +7,8 @@ services:
     environment:
       ARIEL_DB_PATH: /data/ariel.db
       FIREBASE_CREDENTIALS_PATH: /run/secrets/firebase-service-account.json
+      # How long an iPhone counts as online after it last reported in (docs/ios.md).
+      ARIEL_IOS_PRESENCE_WINDOW_SECONDS: "${ARIEL_IOS_PRESENCE_WINDOW_SECONDS:-1800}"
       # ntfy, for iPhones without push: see the README. Leave NTFY_BASE_URL empty to disable it.
       # NTFY_BASE_URL is how this container reaches ntfy; NTFY_PUBLIC_URL is what phones subscribe
       # to (defaults to the former).

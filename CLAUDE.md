@@ -45,6 +45,7 @@ scripts/ios-sideload.sh
 - Push vs in-app alerts: `ARIEL_PUSH_ENABLED` (xcconfig → Info.plist `ArielPushEnabled`) plus a bundled `GoogleService-Info.plist` give push; otherwise the app polls the relay's `/v1/events` inbox while open. Free Apple teams cannot sign push, so `scripts/ios-sideload.sh` builds them in-app with `ios/Config/PersonalTeam.entitlements`.
 - ntfy works with any build: Settings › ntfy attaches a topic to the buddy ID (`/v1/ntfy/subscribe`), the relay publishes to it, the ntfy app shows it, and tapping opens `ariel://alert?event=<id>`, which reads the panic from the inbox. Setup is in the README.
 - Panics with no hold end in `ArielModel.sendQuickPanic`: the widget's buttons (`WidgetPanicIntent`, a `LiveActivityIntent` so iOS runs it in the app's process, as free teams cannot sign an App Group to share the buddies with the widget), the icon's quick actions (`SceneDelegate`, `UIApplicationShortcutItems` in Info.plist), `ariel://panic` and Shortcuts.
+- Presence while suspended: iOS gives apps no timers, so `BackgroundHeartbeat` hands a background `URLSession` three days of heartbeats in advance (`HeartbeatPlan`, 10 minutes apart); iOS sends them without waking the app and launches it in the background when they run out. A force-quit cancels them.
 - The iOS version is stamped from `appVersionMinor` in `app/build.gradle.kts` (`ios/Config/stamp-version.sh`): 1.N, build N.
 
 ## Testing with virtual buddy
@@ -79,7 +80,9 @@ Every panic send and acknowledgment travels both paths simultaneously:
 | `RelayBackendClient.kt` | All HTTP calls to the relay backend (register, presence, panic, ack) |
 | `ArielFirebaseMessagingService.kt` | Receives FCM data messages, hands off to SirenService |
 | `FirebaseBootstrap.kt` | Initializes Firebase SDK from build-config values at runtime |
+| `IncomingAlertActivity.kt` | Full-screen "I am coming!" screen over the lock screen, opened by the panic notification's full-screen intent or by tapping it |
 | `PanicWidget.kt` | Home screen Glance widget for one-tap panic |
+| `res/xml/shortcuts.xml` | Launcher shortcuts (hold the icon) for the three kinds of panic. They land on the non-exported `QuickPanicAlias`, so no other app can send a panic through exported `MainActivity` |
 | `BootReceiver.kt` | Starts SirenService on device boot/unlock |
 | `MonitoringSafetyWorker.kt` | WorkManager task for background safety checks |
 
@@ -96,13 +99,22 @@ FCM data messages use JSON with `type: "panic"` or `type: "ack"` keys. The relay
 FastAPI REST API backed by SQLite. Endpoints:
 - Device registration (stores FCM token keyed by nearby-advertised ID)
 - Heartbeat (presence for push-less clients such as free-team iOS builds)
-- Presence polling (devices heartbeat every ~60s; considered online within 180s)
+- Presence polling (Android heartbeats every ~90s and counts as online within 180s; an iPhone counts as online for 30 minutes after it last reported in, `ARIEL_IOS_PRESENCE_WINDOW_SECONDS`)
 - Panic forwarding (stores the event in each recipient's inbox, publishes to their ntfy topics in the background, then looks up recipient FCM tokens and calls Firebase Admin SDK)
 - Acknowledgment forwarding (same, to the panic sender)
 - Event inbox (`/v1/events`: the last hour's panics/acks per buddy, polled by push-less clients)
 - ntfy topics (`/v1/ntfy/subscribe`, `/unsubscribe`, `/test`; publishing and the iOS delivery check are in `backend/app/ntfy.py`, a port of PTT's `server/ntfy.py`)
 
 Tests: `cd backend && pip install -r requirements.txt pytest httpx && python -m pytest`.
+
+### Panic alert on Android
+
+`SirenService.showPanicNotification` has to work the same across manufacturers, whose defaults differ (Samsung hides notification content and buttons on the lock screen unless public, and shows heads-up notifications as a small pill with no buttons):
+
+- The full-screen intent opens `IncomingAlertActivity` over a locked or sleeping phone. It needs `USE_FULL_SCREEN_INTENT` in the manifest, which Google Play only accepts once Play Console › App content › Full-screen intent is filled in. On Android 14+ the user may also have to allow it: the Panic tab and Settings ask for it.
+- If the screen is still off 1.5 s later (not allowed, or the device passed on it), a wake lock turns it on so that the lock screen shows the notification.
+- The notification is public and colorized, and "I am coming!" works without unlocking. A tap opens the alert screen and a swipe re-posts the notification: only the button tells the sender help is coming.
+- A service has one foreground notification: while a panic rings, `showMonitorNotification` must not run `startForeground`, or the panic's notification disappears with the siren still sounding. `startMonitoring` runs often (network changes, the app opening, workers), so it is guarded there.
 
 ### Firebase configuration
 

@@ -53,6 +53,19 @@ final class RelayClientTests: XCTestCase {
         XCTAssertEqual(transport.lastBody["buddyId"] as? String, "User_1")
     }
 
+    func testHeartbeatUploadKeepsTheBodyApartForABackgroundSession() throws {
+        let upload = try client.heartbeatUpload(buddyId: "User_1")
+        XCTAssertEqual(upload.request.url?.absoluteString, "https://relay.example.com/v1/heartbeat")
+        XCTAssertEqual(upload.request.httpMethod, "POST")
+        XCTAssertEqual(upload.request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertNil(upload.request.httpBody, "A background upload task refuses a request with a body")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: upload.body) as? [String: Any])
+        XCTAssertEqual(body["buddyId"] as? String, "User_1")
+        XCTAssertEqual(body["platform"] as? String, "ios")
+        XCTAssertEqual(body["appVersion"] as? String, "1.64")
+        XCTAssertTrue(transport.requests.isEmpty, "Building it sends nothing")
+    }
+
     func testPresence() async throws {
         transport.response = Data(#"{"status":"ok","onlineBuddyIds":["User_2"],"linkedCount":2}"#.utf8)
         let online = try await client.presence(buddyIds: ["User_2", "User_3", " ", "User_2"], staleAfterSeconds: 5)

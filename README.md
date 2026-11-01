@@ -5,10 +5,11 @@ Ariel is an experimental Android and iOS app designed for emergency situations. 
 ## Features
 - **1.5-Second Panic**: Hold the panic button for 1.5 seconds to trigger.
 - **Home Widget**: One tap on Medical, Generic or Armed sends that alert straight away.
+- **App Icon Shortcuts**: Hold Ariel's icon and tap Medical, Generic or Armed to send that alert straight away.
 - **Loud Alarm**: Plays even if the phone is in Silent or Do Not Disturb (DND) mode.
 - **Multi-Path Connectivity**: Uses Nearby (Bluetooth & WiFi) plus internet relay push notifications, and [ntfy](#iphone-notifications-through-ntfy) on iPhones without push.
 - **Escalation Modes**: Generic, medical, and armed-response context payloads.
-- **Acknowledge**: Tapping the alert stops the sound and notifies the sender.
+- **Acknowledge**: "I am coming!", on the notification or the full-screen alert, stops the sound and notifies the sender, without unlocking the phone.
 
 ## iPhone and iPad
 The iOS app is in [`ios/`](ios): same panic button, pairing and relay, with Android and iOS buddies
@@ -246,6 +247,9 @@ Required GitHub environment:
   - `ANDROID_KEYSTORE_PASSWORD`
   - `ANDROID_KEY_PASSWORD`
 
+Required in Play Console:
+- **App content → Full-screen intent** has to be filled in. Google Play does not accept a build with the `USE_FULL_SCREEN_INTENT` permission without it.
+
 Trigger options:
 - Manual: GitHub → **Actions** → **Play Internal Release** → **Run workflow**
 - Automatic: push to `main` when release-impacting files change:
@@ -324,3 +328,4 @@ If you only have one real device, you can use the included Python script to simu
 - **Boot Start**: Ariel automatically starts monitoring when your phone boots up.
 - **Battery Optimization**: For "Never Sleep" protection, bypass battery optimization when prompted by the app.
 - **DND Bypass**: Panic alerts are high-priority and will bypass "Do Not Disturb" settings.
+- **Full-Screen Alerts**: A panic wakes the phone and shows the "I am coming!" button over the lock screen. On Android 14+ this may have to be allowed in System Settings: Ariel's Panic tab and Settings say so and link to the toggle. Without it, the screen still turns on and the lock screen shows the notification.

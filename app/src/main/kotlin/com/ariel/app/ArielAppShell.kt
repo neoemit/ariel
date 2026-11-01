@@ -1,6 +1,7 @@
 package com.thomaslamendola.ariel
 
 import android.Manifest
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -91,8 +92,34 @@ private fun findMissingPermissions(context: Context, permissions: List<String>):
     }
 }
 
+/**
+ * Whether a panic may take over a locked or sleeping phone. Google Play only grants this by itself to
+ * alarm and calling apps on Android 14+, and it is not a runtime permission: it is a toggle in Settings.
+ */
+private fun canUseFullScreenAlerts(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
+    return context.getSystemService(NotificationManager::class.java).canUseFullScreenIntent()
+}
+
+private fun openFullScreenAlertSettings(context: Context) {
+    val packageUri = Uri.fromParts("package", context.packageName, null)
+    val toggle = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, packageUri)
+    } else {
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri)
+    }
+    runCatching { context.startActivity(toggle) }.recoverCatching {
+        // Not every manufacturer's Settings has the page.
+        context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri))
+    }
+}
+
 @Composable
-fun ArielApp(viewModel: PanicViewModel = viewModel()) {
+fun ArielApp(
+    quickPanicEscalation: String? = null,
+    onQuickPanicSent: () -> Unit = {},
+    viewModel: PanicViewModel = viewModel(),
+) {
     var selectedTab by remember { mutableStateOf(0) } // 0=Panic,1=Pairing,2=Settings
     val context = androidx.compose.ui.platform.LocalContext.current
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
@@ -101,9 +128,21 @@ fun ArielApp(viewModel: PanicViewModel = viewModel()) {
     var missingPermissions by remember {
         mutableStateOf(findMissingPermissions(context, requiredPermissions))
     }
+    var fullScreenAlertsAllowed by remember { mutableStateOf(canUseFullScreenAlerts(context)) }
 
     fun refreshPermissions() {
         missingPermissions = findMissingPermissions(context, requiredPermissions)
+        fullScreenAlertsAllowed = canUseFullScreenAlerts(context)
+    }
+
+    val enableFullScreenAlerts: () -> Unit = { openFullScreenAlertSettings(context) }
+
+    LaunchedEffect(quickPanicEscalation) {
+        if (quickPanicEscalation != null) {
+            viewModel.triggerQuickPanic(quickPanicEscalation)
+            selectedTab = 0
+            onQuickPanicSent()
+        }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -196,7 +235,9 @@ fun ArielApp(viewModel: PanicViewModel = viewModel()) {
                     viewModel = viewModel,
                     missingPermissions = missingPermissions,
                     onRequestPermissions = requestPermissions,
-                    onOpenAppSettings = openAppSettings
+                    onOpenAppSettings = openAppSettings,
+                    fullScreenAlertsAllowed = fullScreenAlertsAllowed,
+                    onEnableFullScreenAlerts = enableFullScreenAlerts
                 )
                 1 -> PairingScreen(
                     viewModel = viewModel,
@@ -209,7 +250,9 @@ fun ArielApp(viewModel: PanicViewModel = viewModel()) {
                     permissionGroups = permissionGroups,
                     missingPermissions = missingPermissions,
                     onRequestPermissions = requestPermissions,
-                    onOpenAppSettings = openAppSettings
+                    onOpenAppSettings = openAppSettings,
+                    fullScreenAlertsAllowed = fullScreenAlertsAllowed,
+                    onEnableFullScreenAlerts = enableFullScreenAlerts
                 )
             }
 
@@ -301,12 +344,42 @@ fun PermissionBlockedScreen(
     }
 }
 
+/** Asks for what makes a panic take over a locked phone: without it, it is only a notification. */
+@Composable
+fun FullScreenAlertsBanner(onEnable: () -> Unit, modifier: Modifier = Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    ElevatedCard(shape = RoundedCornerShape(16.dp), modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = context.getString(R.string.full_screen_alerts_banner_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = context.getString(R.string.permission_full_screen_intent_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(onClick = onEnable, modifier = Modifier.fillMaxWidth()) {
+                Text(context.getString(R.string.permission_full_screen_intent_action))
+            }
+        }
+    }
+}
+
 @Composable
 fun PermissionStatusCard(
     permissionGroups: List<PermissionGroup>,
     missingPermissions: List<String>,
     onRequestPermissions: () -> Unit,
     onOpenAppSettings: () -> Unit,
+    fullScreenAlertsAllowed: Boolean,
+    onEnableFullScreenAlerts: () -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val missingSet = remember(missingPermissions) { missingPermissions.toSet() }
@@ -365,6 +438,45 @@ fun PermissionStatusCard(
                             MaterialTheme.colorScheme.error
                         }
                     )
+                }
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = context.getString(R.string.permission_group_full_screen_intent),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = if (fullScreenAlertsAllowed) {
+                            context.getString(R.string.permissions_status_granted)
+                        } else {
+                            context.getString(R.string.permissions_status_not_granted)
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (fullScreenAlertsAllowed) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        }
+                    )
+                }
+                if (!fullScreenAlertsAllowed) {
+                    Text(
+                        text = context.getString(R.string.permission_full_screen_intent_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedButton(
+                        onClick = onEnableFullScreenAlerts,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(context.getString(R.string.permission_full_screen_intent_action))
+                    }
                 }
             }
 

@@ -1,2 +1,6 @@
 Latest changes:
-• Restores Ariel’s native title-only persistent notification layout.
+• A panic now wakes a locked phone and shows the "I am coming!" button.
+• The panic notification no longer disappears while the siren is ringing.
+• Tapping the notification opens the alert instead of acknowledging it; a swipe no longer acknowledges it either.
+• Hold the app icon for Medical, Generic and Armed shortcuts.
+• iPhone buddies now show as online while Ariel is in the background.

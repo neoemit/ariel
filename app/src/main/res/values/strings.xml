@@ -94,8 +94,15 @@
     <string name="permission_group_camera">Camera</string>
     <string name="permission_group_notifications">Notifications</string>
     <string name="permission_group_full_screen_intent">Full-screen alerts</string>
-    <string name="permission_full_screen_intent_desc">Required on Android 14+ so alerts appear on the lock screen when the phone rings.</string>
+    <string name="permission_full_screen_intent_desc">Lets a buddy\'s panic wake this phone and show the \"I am coming!\" button over the lock screen. Without it, the alert is only a notification.</string>
     <string name="permission_full_screen_intent_action">Enable in System Settings</string>
+    <string name="full_screen_alerts_banner_title">Allow full-screen alerts</string>
+    <string name="shortcut_medical_short">Medical</string>
+    <string name="shortcut_medical_long">Medical: alert buddies now</string>
+    <string name="shortcut_generic_short">Generic</string>
+    <string name="shortcut_generic_long">Generic: alert buddies now</string>
+    <string name="shortcut_armed_short">Armed</string>
+    <string name="shortcut_armed_long">Armed: alert buddies now</string>
     <string name="settings_reset_confirm_title">Reset all buddy links?</string>
     <string name="settings_reset_confirm_body">This removes all paired buddies and nicknames from this device. You can pair again anytime.</string>
     <string name="settings_reset_confirm_action">Reset links</string>

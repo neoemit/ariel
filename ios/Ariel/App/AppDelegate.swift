@@ -29,6 +29,26 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return configuration
     }
 
+    /// The background heartbeats have all gone out (`BackgroundHeartbeat`): time to schedule the next ones.
+    func application(
+        _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        guard identifier == BackgroundHeartbeat.identifier else {
+            completionHandler()
+            return
+        }
+        MainActor.assumeIsolated {
+            BackgroundHeartbeat.shared.handleEvents {
+                Task { @MainActor in
+                    await ArielModel.shared.performBackgroundRefresh()
+                    completionHandler()
+                }
+            }
+        }
+    }
+
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         MainActor.assumeIsolated {
             PushManager.shared.setAPNsToken(deviceToken)

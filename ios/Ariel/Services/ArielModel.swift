@@ -208,6 +208,7 @@ final class ArielModel {
         ]
         Task { await refreshNotificationStatus() }
         Task { await refreshNtfy() }
+        Task { await syncBackgroundHeartbeat() }
     }
 
     private func registrationLoop() async {
@@ -232,9 +233,10 @@ final class ArielModel {
         }
     }
 
-    /// Background app refresh: keep presence and the push registration fresh, and in builds without push
-    /// pick up panics, which then show as notifications.
+    /// Background app refresh, or iOS reporting on the background heartbeats: keep presence and the push
+    /// registration fresh, and in builds without push pick up panics, which then show as notifications.
     func performBackgroundRefresh() async {
+        await syncBackgroundHeartbeat()
         await register()
         await refreshNtfy()
         // With push, the relay's alert has already been shown; reading the inbox would show it twice.
@@ -259,6 +261,15 @@ final class ArielModel {
         } catch {
             noteRelayFailure(error)
         }
+    }
+
+    /// Hands iOS the heartbeats that keep this device online while Ariel is suspended, or takes them back
+    /// when there is nobody left to be online for.
+    private func syncBackgroundHeartbeat() async {
+        let plan = friends.isEmpty
+            ? nil
+            : HeartbeatPlan(relayURL: relayURL, buddyId: myId, appVersion: configuration.version)
+        await BackgroundHeartbeat.shared.sync(plan, relay: relay)
     }
 
     /// Firebase issued or rotated the FCM token.
@@ -581,6 +592,7 @@ final class ArielModel {
         Task {
             await register()
             await refreshPresence()
+            await syncBackgroundHeartbeat()
         }
         return nil
     }
@@ -592,6 +604,7 @@ final class ArielModel {
         prefs.nicknames = nicknames
         tracker.retain(friends: Set(friends))
         applyTracker()
+        Task { await syncBackgroundHeartbeat() }
     }
 
     func setNickname(_ nickname: String, for id: String) {
@@ -606,6 +619,7 @@ final class ArielModel {
         nicknames = [:]
         tracker.retain(friends: [])
         applyTracker()
+        Task { await syncBackgroundHeartbeat() }
     }
 
     // MARK: - Settings
@@ -625,6 +639,7 @@ final class ArielModel {
             await register()
             await refreshPresence()
             await refreshNtfy()
+            await syncBackgroundHeartbeat()
         }
         return true
     }

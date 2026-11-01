@@ -45,7 +45,7 @@ How a buddy's panic reaches an iPhone depends on the build and on whether ntfy i
 | App closed or phone locked | Notification with the siren sound | Notification from the ntfy app, with its ordinary sound | Nothing, except what background refresh finds now and then |
 | App open | Full-screen alert with the siren | Same: the app reads the relay's inbox every 4 seconds | Same |
 | "I am coming!" | From the notification or the app | From the app: tapping the notification opens the alert | From the app |
-| Buddy badge | iOS buddies show online while Ariel is open | Same | Same |
+| Buddy badge | iOS buddies keep showing online while Ariel is in the background, unless it was force-quit ([section 7](#7-differences-from-android)) | Same | Same |
 
 Builds signed by a free team cannot have the Push Notifications entitlement, so
 [`scripts/ios-sideload.sh`](#6-sideloading-onto-your-iphones-and-ipads) builds them without push by
@@ -239,9 +239,19 @@ and its device cannot be reached, the Mac shows a notification. It logs to
   iOS every panic and acknowledgment goes through the relay, which needs internet on both phones.
   Android ↔ iOS works through the relay in both directions.
 - **No always-on monitoring.** iOS suspends apps in the background: there is no foreground service,
-  boot receiver or battery-optimisation step. Presence is sent while the app is open (and by
-  background refresh when iOS allows it), so an iPhone buddy shows online to others mostly while
-  Ariel is open. Panics are sent to every trusted buddy regardless.
+  boot receiver or battery-optimisation step. Panics are sent to every trusted buddy regardless of
+  what the badge says.
+- **Presence in the background is best effort.** Android reports in every 90 seconds. An iPhone does
+  so every minute while Ariel is open, and from then on through three days of small heartbeats handed
+  to iOS in advance, 10 minutes apart, which iOS sends by itself without waking the app
+  (`BackgroundHeartbeat`, `HeartbeatPlan`). Background refresh adds to them when iOS allows it. The
+  relay counts an iPhone as online for 30 minutes after it last reported in
+  (`ARIEL_IOS_PRESENCE_WINDOW_SECONDS`), so online means "reported in within half an hour", not "right
+  now", and an iPhone that was switched off keeps showing for up to that long. iOS decides when each
+  heartbeat really goes out: it may hold them back on low battery or in Low Power Mode, and
+  force-quitting Ariel (swiping it away in the app switcher) cancels them until it is next opened.
+  This works on free-team builds, as it takes no entitlement. Keeping the app running instead, with a
+  silent audio track or by tracking location, would drain the battery, and App Review rejects it.
 - **The siren** is a bundled sound (`siren.wav`), not a choice of system ringtones. It plays through
   the Ring/Silent switch while Ariel is open and keeps playing if the phone is locked while it rings.
   It cannot set the system volume. A push notification plays it once (up to 30 seconds).
