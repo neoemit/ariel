@@ -1039,6 +1039,17 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    TextButton(
+                        onClick = {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(context.getString(R.string.privacy_policy_url)))
+                                )
+                            }
+                        }
+                    ) {
+                        Text(context.getString(R.string.privacy_policy))
+                    }
                 }
             }
         }

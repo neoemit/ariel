@@ -56,6 +56,8 @@
     <string name="about">ABOUT</string>
     <string name="about_title">About Ariel</string>
     <string name="about_text">Ariel helps you stay connected with your buddies and send emergency alerts with a single press. Nearby (Bluetooth/WiFi) and internet relay push can both deliver alerts.</string>
+    <string name="privacy_policy">Privacy policy</string>
+    <string name="privacy_policy_url" translatable="false">https://lmbdev.co.za/ariel/privacy-policy</string>
     <string name="close">CLOSE</string>
     <string name="version_display">Version %1$s</string>
     <string name="relay_url_title">Internet Relay</string>

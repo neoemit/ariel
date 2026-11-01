@@ -85,6 +85,7 @@ struct SettingsView: View {
                         .font(.callout)
                     LabeledContent("Your ID", value: model.myId)
                     LabeledContent("Version", value: model.configuration.versionDescription)
+                    Link("Privacy Policy", destination: AppConfiguration.privacyPolicyURL)
                 } header: {
                     Text("About")
                 }

@@ -111,7 +111,7 @@ Tests: `cd backend && pip install -r requirements.txt pytest httpx && python -m 
 
 `SirenService.showPanicNotification` has to work the same across manufacturers, whose defaults differ (Samsung hides notification content and buttons on the lock screen unless public, and shows heads-up notifications as a small pill with no buttons):
 
-- The full-screen intent opens `IncomingAlertActivity` over a locked or sleeping phone. It needs `USE_FULL_SCREEN_INTENT` in the manifest, which Google Play only accepts once Play Console › App content › Full-screen intent is filled in. On Android 14+ the user may also have to allow it: the Panic tab and Settings ask for it.
+- The full-screen intent opens `IncomingAlertActivity` over a locked or sleeping phone. It needs `USE_FULL_SCREEN_INTENT` in the manifest, which Google Play only accepts once Play Console › App content › Full-screen intent is filled in (answered "Other", as Ariel is not an alarm clock, so Play does not pre-grant it). On Android 14+ the user has to allow it: the Panic tab and Settings ask for it.
 - If the screen is still off 1.5 s later (not allowed, or the device passed on it), a wake lock turns it on so that the lock screen shows the notification.
 - The notification is public and colorized, and "I am coming!" works without unlocking. A tap opens the alert screen and a swipe re-posts the notification: only the button tells the sender help is coming.
 - A service has one foreground notification: while a panic rings, `showMonitorNotification` must not run `startForeground`, or the panic's notification disappears with the siren still sounding. `startMonitoring` runs often (network changes, the app opening, workers), so it is guarded there.

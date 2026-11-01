@@ -13,6 +13,8 @@ enum DeliveryMode: Equatable, Sendable {
 /// Build-time settings, from Info.plist (set through ios/Config/*.xcconfig).
 struct AppConfiguration: Equatable, Sendable {
     static let pushEnabledKey = "ArielPushEnabled"
+    /// Google Play has this address too, so it should not move (lmbdev-website's README).
+    static let privacyPolicyURL = URL(string: "https://lmbdev.co.za/ariel/privacy-policy")!
 
     /// The build asks for push (ARIEL_PUSH_ENABLED).
     var pushRequested: Bool
