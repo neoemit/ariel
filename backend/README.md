@@ -15,6 +15,9 @@ signed by a free Apple team, see `docs/ios.md`).
   - Presence for clients without a push token.
 - `POST /v1/presence`
   - `{ "buddyIds": ["User_5678"], "staleAfterSeconds": 180 }`
+  - A buddy whose `platform` is `ios` counts as online for at least `ARIEL_IOS_PRESENCE_WINDOW_SECONDS`
+    (default 1800) after it last reported in: iOS suspends apps, so an iPhone in a pocket cannot report
+    in every minute as Android does (`docs/ios.md`).
 - `POST /v1/panic`
   - `{ "senderId": "User_1234", "eventId": "<uuid>", "escalationType": "GENERIC|MEDICAL|ARMED", "recipientIds": ["User_5678"] }`
   - Stored in each recipient's inbox, then pushed. Without Firebase credentials it answers

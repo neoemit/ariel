@@ -28,6 +28,11 @@ FIREBASE_CREDENTIALS_PATH = os.getenv(
 # Panic and acknowledgment events are also kept in a per-recipient inbox, so that clients without
 # push (iOS builds signed by a free Apple team) can poll for them while they are open.
 EVENT_RETENTION_SECONDS = int(os.getenv("ARIEL_EVENT_RETENTION_SECONDS", "3600"))
+# Android's foreground service reports in every 90 seconds. iOS suspends apps, so an iPhone in a pocket
+# reports in when iOS lets it: every 10 minutes at best (docs/ios.md). Holding it to Android's freshness
+# would show every iPhone offline as soon as Ariel left the screen.
+IOS_PRESENCE_WINDOW_SECONDS = int(os.getenv("ARIEL_IOS_PRESENCE_WINDOW_SECONDS", "1800"))
+IOS_PLATFORM = "ios"
 # Sound bundled in the iOS app (ios/Ariel/Resources/siren.wav), played by APNs alerts.
 APNS_ALERT_SOUND = "siren.wav"
 
@@ -291,25 +296,29 @@ def get_presence_for_buddies(
     placeholders = ",".join("?" for _ in buddy_ids)
     # Push devices heartbeat by re-registering their token; push-less clients by /v1/heartbeat.
     sql = f"""
-        SELECT buddy_id, MAX(last_seen) AS last_seen
+        SELECT seen.buddy_id AS buddy_id, MAX(seen.last_seen) AS last_seen, known.platform AS platform
         FROM (
             SELECT buddy_id, updated_at AS last_seen FROM devices WHERE buddy_id IN ({placeholders})
             UNION ALL
             SELECT buddy_id, last_seen FROM presence WHERE buddy_id IN ({placeholders})
-        )
-        GROUP BY buddy_id
+        ) AS seen
+        LEFT JOIN presence AS known ON known.buddy_id = seen.buddy_id
+        GROUP BY seen.buddy_id
     """
     with get_connection() as conn:
         rows = conn.execute(sql, tuple(buddy_ids) * 2).fetchall()
 
     now = int(time.time())
-    threshold = now - max(online_within_seconds, 30)
+    requested_window = max(online_within_seconds, 30)
 
     presence: Dict[str, int] = {}
     for row in rows:
         buddy_id = str(row["buddy_id"])
         last_seen = int(row["last_seen"])
-        if last_seen >= threshold:
+        window = requested_window
+        if row["platform"] == IOS_PLATFORM:
+            window = max(window, IOS_PRESENCE_WINDOW_SECONDS)
+        if last_seen >= now - window:
             presence[buddy_id] = last_seen
 
     return presence

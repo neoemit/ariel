@@ -34,6 +34,57 @@ def test_registered_push_device_is_online(relay):
     assert response["onlineBuddyIds"] == ["User_2222"]
 
 
+def age_presence(relay, seconds):
+    with relay.main.get_connection() as conn:
+        conn.execute("UPDATE presence SET last_seen = last_seen - ?", (seconds,))
+        conn.execute("UPDATE devices SET updated_at = updated_at - ?", (seconds,))
+
+
+def online(relay, *buddy_ids):
+    return relay.post("/v1/presence", json={"buddyIds": list(buddy_ids)}).json()["onlineBuddyIds"]
+
+
+def test_suspended_iphone_stays_online_between_background_heartbeats(relay):
+    relay.post("/v1/heartbeat", json={"buddyId": "User_2222", "platform": "ios"})
+    age_presence(relay, 15 * 60)
+
+    # The client still asks for 180 seconds: it does not know which of its buddies are iPhones.
+    assert online(relay, "User_2222") == ["User_2222"]
+
+
+def test_iphone_goes_offline_when_it_stops_reporting(relay):
+    relay.post("/v1/heartbeat", json={"buddyId": "User_2222", "platform": "ios"})
+    age_presence(relay, relay.main.IOS_PRESENCE_WINDOW_SECONDS + 60)
+
+    assert online(relay, "User_2222") == []
+
+
+def test_iphone_with_push_gets_the_same_window(relay):
+    relay.post("/v1/register-device", json={"buddyId": "User_2222", "token": "t" * 32, "platform": "ios"})
+    age_presence(relay, 15 * 60)
+
+    assert online(relay, "User_2222") == ["User_2222"]
+
+
+def test_android_buddy_is_held_to_the_requested_freshness(relay):
+    # Android's client sends no platform.
+    relay.post("/v1/register-device", json={"buddyId": "User_3333", "token": "t" * 32})
+    assert online(relay, "User_3333") == ["User_3333"]
+
+    age_presence(relay, 181)
+
+    assert online(relay, "User_3333") == []
+
+
+def test_presence_mixes_platforms_in_one_answer(relay):
+    relay.post("/v1/heartbeat", json={"buddyId": "User_2222", "platform": "ios"})
+    relay.post("/v1/register-device", json={"buddyId": "User_3333", "token": "t" * 32})
+    age_presence(relay, 15 * 60)
+    relay.post("/v1/register-device", json={"buddyId": "User_4444", "token": "u" * 32})
+
+    assert online(relay, "User_2222", "User_3333", "User_4444", "User_5555") == ["User_2222", "User_4444"]
+
+
 def test_panic_without_firebase_is_queued_for_polling(relay):
     response = panic(relay).json()
 
