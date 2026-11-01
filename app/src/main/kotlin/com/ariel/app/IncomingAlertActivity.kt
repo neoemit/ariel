@@ -17,12 +17,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -33,6 +37,8 @@ import androidx.core.content.ContextCompat
 import com.thomaslamendola.ariel.ui.theme.ArielTheme
 
 class IncomingAlertActivity : ComponentActivity() {
+    private var displayName by mutableStateOf("")
+    private var escalationType by mutableStateOf(PanicViewModel.ESCALATION_GENERIC)
 
     private val sirenStoppedReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -57,8 +63,7 @@ class IncomingAlertActivity : ComponentActivity() {
         }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        val displayName = intent.getStringExtra(EXTRA_DISPLAY_NAME) ?: ""
-        val escalationType = intent.getStringExtra(EXTRA_ESCALATION_TYPE) ?: PanicViewModel.ESCALATION_GENERIC
+        showAlert(intent)
 
         ContextCompat.registerReceiver(
             this,
@@ -81,6 +86,18 @@ class IncomingAlertActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    /** Another panic came in while this screen was up, or the notification was tapped. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        showAlert(intent)
+    }
+
+    private fun showAlert(intent: Intent) {
+        displayName = intent.getStringExtra(EXTRA_DISPLAY_NAME) ?: ""
+        escalationType = intent.getStringExtra(EXTRA_ESCALATION_TYPE) ?: PanicViewModel.ESCALATION_GENERIC
     }
 
     override fun onDestroy() {
@@ -113,6 +130,8 @@ private fun IncomingAlertScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // Clear of the status bar and of the taller button navigation bar, Samsung's default.
+                .safeDrawingPadding()
                 .padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween

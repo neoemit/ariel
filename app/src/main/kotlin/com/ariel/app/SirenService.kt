@@ -15,13 +15,17 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,12 +54,19 @@ class SirenService : Service() {
     private val relayBootstrapDelaysMs = listOf(15_000L, 30_000L)
     private val relayHeartbeatIntervalMs = 90_000L
     private val tokenRetryBackoffMs = longArrayOf(30_000L, 60_000L, 120_000L, 300_000L)
+    private val screenWakeFallbackDelayMs = 1_500L
+    private val screenWakeDurationMs = 30_000L
 
     private var nearbyManager: NearbyManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var screenWakeLock: PowerManager.WakeLock? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val screenWakeFallback = Runnable { wakeScreenIfStillOff() }
     private var vibrator: Vibrator? = null
     private var currentPanicSender: String? = null
     private var currentPanicEventId: String? = null
+    private var activePanicNotification: Notification? = null
+    private val quickPanicTracker = QuickPanicTracker { UUID.randomUUID().toString() }
     private val handledEventIds = LinkedHashSet<String>()
     private val handledAckIds = LinkedHashSet<String>()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -116,10 +127,21 @@ class SirenService : Service() {
                 stopSiren()
             }
 
+            ACTION_REPOST_PANIC_ALERT -> {
+                activePanicNotification?.let { notification ->
+                    val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    notificationManager.notify(notificationId, notification)
+                }
+            }
+
             "TRIGGER_PANIC" -> {
                 startMonitoring()
-                val escalationType = intent.getStringExtra("ESCALATION_TYPE") ?: PanicViewModel.ESCALATION_GENERIC
-                val eventId = UUID.randomUUID().toString()
+                val escalationType = intent.getStringExtra(EXTRA_ESCALATION_TYPE) ?: PanicViewModel.ESCALATION_GENERIC
+                val eventId = if (intent.getBooleanExtra(EXTRA_QUICK_PANIC, false)) {
+                    quickPanicTracker.eventIdFor(escalationType, SystemClock.elapsedRealtime())
+                } else {
+                    UUID.randomUUID().toString()
+                }
                 nearbyManager?.enterUrgentMode()
                 nearbyManager?.broadcastPanic(escalationType, eventId)
                 sendRelayPanic(eventId, escalationType)
@@ -489,12 +511,20 @@ class SirenService : Service() {
             .build()
     }
 
+    /**
+     * A service has one foreground notification, and starting with another ID removes the one before.
+     * Monitoring restarts for all sorts of reasons, such as the network coming back as a push wakes the
+     * phone, and must not take a ringing panic's "I am coming!" button away. [stopSiren] brings this
+     * notification back.
+     */
     private fun showMonitorNotification() {
+        if (activePanicNotification != null) return
         ensureMonitorChannelCreated()
         startForeground(monitorNotificationId, buildMonitorNotification())
     }
 
     private fun hideMonitorNotification() {
+        if (activePanicNotification != null) return
         runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -586,6 +616,9 @@ class SirenService : Service() {
             if (it.isHeld) it.release()
         }
         wakeLock = null
+        activePanicNotification = null
+        mainHandler.removeCallbacks(screenWakeFallback)
+        releaseScreenWakeLock()
 
         val sender = currentPanicSender
         val eventId = currentPanicEventId
@@ -620,10 +653,10 @@ class SirenService : Service() {
             else -> PanicViewModel.ESCALATION_GENERIC
         }
 
-        val (emoji, reasonText) = when (normalizedEscalation) {
-            PanicViewModel.ESCALATION_MEDICAL -> "🚑" to "$displayName requires medical assistance."
-            PanicViewModel.ESCALATION_ARMED -> "🔫" to "$displayName is in danger and requires armed response."
-            else -> "🚨" to "$displayName requires urgent assistance."
+        val (emoji, reasonText, colorRes) = when (normalizedEscalation) {
+            PanicViewModel.ESCALATION_MEDICAL -> Triple("🚑", "$displayName requires medical assistance.", R.color.panic_medical)
+            PanicViewModel.ESCALATION_ARMED -> Triple("🔫", "$displayName is in danger and requires armed response.", R.color.panic_armed)
+            else -> Triple("🚨", "$displayName requires urgent assistance.", R.color.panic_generic)
         }
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -649,56 +682,109 @@ class SirenService : Service() {
             notificationManager.createNotificationChannel(channel)
         }
 
-        val stopIntent = Intent(this, SirenService::class.java).apply {
-            action = "STOP_SIREN"
-        }
-        val stopPendingIntent = PendingIntent.getService(
+        val acknowledgePendingIntent = PendingIntent.getService(
             this,
             0,
-            stopIntent,
+            Intent(this, SirenService::class.java).apply { action = "STOP_SIREN" },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        // Over the lock screen, the alert does not need the phone unlocked either.
+        val acknowledgeAction = NotificationCompat.Action.Builder(
+            android.R.drawable.ic_delete,
+            "I am coming!",
+            acknowledgePendingIntent
+        )
+            .setAuthenticationRequired(false)
+            .setShowsUserInterface(false)
+            .build()
 
-        val fullScreenIntent = Intent(this, IncomingAlertActivity::class.java).apply {
+        // The big "I am coming!" screen. Android opens it by itself over a locked or sleeping phone, and
+        // a tap on the notification opens it otherwise: on Samsung's default pop-up, the only thing there
+        // is to tap. Telling the sender help is coming takes the button, never just a stray tap.
+        val alertIntent = Intent(this, IncomingAlertActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(IncomingAlertActivity.EXTRA_DISPLAY_NAME, displayName)
             putExtra(IncomingAlertActivity.EXTRA_ESCALATION_TYPE, normalizedEscalation)
         }
-        val fullScreenPendingIntent = PendingIntent.getActivity(
+        val alertPendingIntent = PendingIntent.getActivity(
             this,
             1,
-            fullScreenIntent,
+            alertIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val canUseFullScreenIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            notificationManager.canUseFullScreenIntent()
-        } else {
-            true
-        }
+        // Android 14+ lets people swipe away even a foreground service's notification, which has
+        // answered nothing: the siren is still ringing, so the way to stop it comes back.
+        val repostPendingIntent = PendingIntent.getService(
+            this,
+            2,
+            Intent(this, SirenService::class.java).apply { action = ACTION_REPOST_PANIC_ALERT },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
-        val notificationBuilder = NotificationCompat.Builder(this, panicChannelId)
+        val notification = NotificationCompat.Builder(this, panicChannelId)
             .setContentTitle("ARIEL PANIC ALERT $emoji")
             .setContentText(reasonText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(reasonText))
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
+            // Samsung, among others, hides what a notification says and its buttons on the lock screen
+            // unless it is public.
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            // A colorized foreground service notification ranks first, where Android expands it, with
+            // its button showing.
+            .setColor(ContextCompat.getColor(this, colorRes))
+            .setColorized(true)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setOngoing(true)
             .setAutoCancel(false)
-            .setContentIntent(stopPendingIntent)
-            .setDeleteIntent(stopPendingIntent)
-            .addAction(android.R.drawable.ic_delete, "I am coming!", stopPendingIntent)
+            .setContentIntent(alertPendingIntent)
+            .setDeleteIntent(repostPendingIntent)
+            .addAction(acknowledgeAction)
+            // Asked for even when it is not allowed (Android 14+): Android then keeps the heads-up
+            // notification on screen for longer.
+            .setFullScreenIntent(alertPendingIntent, true)
+            .build()
+            .apply { flags = flags or Notification.FLAG_NO_CLEAR }
 
-        if (canUseFullScreenIntent) {
-            notificationBuilder.setFullScreenIntent(fullScreenPendingIntent, true)
-        }
-
-        val notification = notificationBuilder.build().apply {
-                flags = flags or Notification.FLAG_NO_CLEAR
-            }
-
+        activePanicNotification = notification
         startForeground(notificationId, notification)
         notificationManager.notify(notificationId, notification)
+
+        mainHandler.removeCallbacks(screenWakeFallback)
+        mainHandler.postDelayed(screenWakeFallback, screenWakeFallbackDelayMs)
+    }
+
+    /**
+     * For when the full-screen alert did not turn the screen on (the user has not allowed it, or the
+     * device passed on it): the lock screen then shows the notification. It waits for the alert to have
+     * its chance, as Android only opens that on a phone that is asleep or locked.
+     *
+     * Activities have turnScreenOn instead, which the alert uses, but this is what a service has. It
+     * works without android.permission.TURN_SCREEN_ON up to target SDK 36; PowerManagerService's
+     * REQUIRE_TURN_SCREEN_ON_PERMISSION is the change to check when raising the target.
+     */
+    @Suppress("DEPRECATION")
+    private fun wakeScreenIfStillOff() {
+        if (currentPanicSender == null) return
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (powerManager.isInteractive) return
+        Log.d("ArielService", "Panic alert left the screen off; turning it on")
+        releaseScreenWakeLock()
+        screenWakeLock = powerManager.newWakeLock(
+            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE,
+            "Ariel:PanicScreenWake"
+        ).apply {
+            acquire(screenWakeDurationMs)
+        }
+    }
+
+    private fun releaseScreenWakeLock() {
+        screenWakeLock?.let {
+            if (it.isHeld) it.release()
+        }
+        screenWakeLock = null
     }
 
     private fun showAckNotification(acknowledgerId: String) {
@@ -747,6 +833,10 @@ class SirenService : Service() {
         const val ACTION_PANIC_ALERT_STATE = "com.thomaslamendola.ariel.PANIC_ALERT_STATE"
         const val EXTRA_ALERT_ACTIVE = "EXTRA_ALERT_ACTIVE"
         const val EXTRA_ALERT_SENDER_ID = "EXTRA_ALERT_SENDER_ID"
+        const val EXTRA_ESCALATION_TYPE = "ESCALATION_TYPE"
+        /** A panic with no hold first: a launcher shortcut or the widget. */
+        const val EXTRA_QUICK_PANIC = "QUICK_PANIC"
+        private const val ACTION_REPOST_PANIC_ALERT = "REPOST_PANIC_ALERT"
     }
 
     private fun isDiscreetModeEnabled(): Boolean {
@@ -773,6 +863,8 @@ class SirenService : Service() {
             if (it.isHeld) it.release()
         }
         wakeLock = null
+        mainHandler.removeCallbacks(screenWakeFallback)
+        releaseScreenWakeLock()
         relayBootstrapRetryJob?.cancel()
         relayBootstrapRetryJob = null
         relayHeartbeatJob?.cancel()
@@ -786,7 +878,8 @@ class SirenService : Service() {
         if (networkCallbackRegistered) return
         val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
         runCatching {
-            connectivityManager.registerDefaultNetworkCallback(networkCallback)
+            // On the main thread, with everything else that touches the foreground notification.
+            connectivityManager.registerDefaultNetworkCallback(networkCallback, mainHandler)
             networkCallbackRegistered = true
         }.onFailure { error ->
             Log.w("ArielService", "Failed to register network callback: ${error.message}")

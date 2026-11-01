@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The kinds of panic, as on the home screen widget (PanicWidget.kt). -->
+    <color name="panic_medical">#FF1565C0</color>
+    <color name="panic_generic">#FFD32F2F</color>
+    <color name="panic_armed">#FF6A1B1A</color>
+</resources>

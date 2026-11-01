@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Holding Ariel's icon offers the three kinds of panic, as on iOS. The action and the extra's name are
+     MainActivity's ACTION_QUICK_PANIC and SirenService's EXTRA_ESCALATION_TYPE; an intent here cannot
+     use string resources. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="panic_medical"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_medical"
+        android:shortcutShortLabel="@string/shortcut_medical_short"
+        android:shortcutLongLabel="@string/shortcut_medical_long">
+        <intent
+            android:action="com.thomaslamendola.ariel.QUICK_PANIC"
+            android:targetClass="com.thomaslamendola.ariel.QuickPanicAlias"
+            android:targetPackage="com.thomaslamendola.ariel">
+            <extra
+                android:name="ESCALATION_TYPE"
+                android:value="MEDICAL" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="panic_generic"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_generic"
+        android:shortcutShortLabel="@string/shortcut_generic_short"
+        android:shortcutLongLabel="@string/shortcut_generic_long">
+        <intent
+            android:action="com.thomaslamendola.ariel.QUICK_PANIC"
+            android:targetClass="com.thomaslamendola.ariel.QuickPanicAlias"
+            android:targetPackage="com.thomaslamendola.ariel">
+            <extra
+                android:name="ESCALATION_TYPE"
+                android:value="GENERIC" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="panic_armed"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_armed"
+        android:shortcutShortLabel="@string/shortcut_armed_short"
+        android:shortcutLongLabel="@string/shortcut_armed_long">
+        <intent
+            android:action="com.thomaslamendola.ariel.QUICK_PANIC"
+            android:targetClass="com.thomaslamendola.ariel.QuickPanicAlias"
+            android:targetPackage="com.thomaslamendola.ariel">
+            <extra
+                android:name="ESCALATION_TYPE"
+                android:value="ARMED" />
+        </intent>
+    </shortcut>
+</shortcuts>

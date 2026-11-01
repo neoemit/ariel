@@ -75,16 +75,45 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 class MainActivity : ComponentActivity() {
+    /** The panic a launcher shortcut asked for, until the app has sent it. */
+    private var quickPanicEscalation by mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Being recreated, the panic of the intent that started this activity has been sent already.
+        if (savedInstanceState == null) readQuickPanic(intent)
         setContent {
             ArielTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    ArielApp()
+                    ArielApp(
+                        quickPanicEscalation = quickPanicEscalation,
+                        onQuickPanicSent = { quickPanicEscalation = null }
+                    )
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        readQuickPanic(intent)
+    }
+
+    private fun readQuickPanic(intent: Intent?) {
+        if (intent == null || intent.action != ACTION_QUICK_PANIC) return
+        // This activity is exported: any app can start it, but only the launcher can reach the alias.
+        if (intent.component?.className != QUICK_PANIC_ALIAS) return
+        // Reopening from Recents replays the intent that started the task: not a new panic.
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        quickPanicEscalation = intent.getStringExtra(SirenService.EXTRA_ESCALATION_TYPE)
+            ?: PanicViewModel.ESCALATION_GENERIC
+    }
+
+    private companion object {
+        const val ACTION_QUICK_PANIC = "com.thomaslamendola.ariel.QUICK_PANIC"
+        const val QUICK_PANIC_ALIAS = "com.thomaslamendola.ariel.QuickPanicAlias"
     }
 }
 
@@ -93,7 +122,9 @@ fun PanicScreen(
     viewModel: PanicViewModel,
     missingPermissions: List<String>,
     onRequestPermissions: () -> Unit,
-    onOpenAppSettings: () -> Unit
+    onOpenAppSettings: () -> Unit,
+    fullScreenAlertsAllowed: Boolean,
+    onEnableFullScreenAlerts: () -> Unit
 ) {
     val ctx = LocalContext.current
     val progress by viewModel.panicTriggerProgress.collectAsState()
@@ -176,6 +207,11 @@ fun PanicScreen(
                 sender = sender,
                 onAcknowledge = { viewModel.acknowledgeIncomingAlert() }
             )
+            Spacer(Modifier.height(12.dp))
+        }
+
+        if (!fullScreenAlertsAllowed) {
+            FullScreenAlertsBanner(onEnable = onEnableFullScreenAlerts)
             Spacer(Modifier.height(12.dp))
         }
 
@@ -903,7 +939,9 @@ fun SettingsScreen(
     permissionGroups: List<PermissionGroup>,
     missingPermissions: List<String>,
     onRequestPermissions: () -> Unit,
-    onOpenAppSettings: () -> Unit
+    onOpenAppSettings: () -> Unit,
+    fullScreenAlertsAllowed: Boolean,
+    onEnableFullScreenAlerts: () -> Unit
 ) {
     val context = LocalContext.current
     val ringtoneUri by viewModel.panicRingtoneUri.collectAsState()
@@ -1225,11 +1263,13 @@ fun SettingsScreen(
                 permissionGroups = permissionGroups,
                 missingPermissions = missingPermissions,
                 onRequestPermissions = onRequestPermissions,
-                onOpenAppSettings = onOpenAppSettings
+                onOpenAppSettings = onOpenAppSettings,
+                fullScreenAlertsAllowed = fullScreenAlertsAllowed,
+                onEnableFullScreenAlerts = onEnableFullScreenAlerts
             )
         }
 
-        // 6) Danger zone
+        //6) Danger zone
         item {
             ElevatedCard(
                 shape = RoundedCornerShape(20.dp),
