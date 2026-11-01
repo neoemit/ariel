@@ -2,6 +2,14 @@ name: Play Internal Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_status:
+        description: "completed reaches internal testers. draft stops in Play Console, for a declaration Play only offers once a bundle exists (a new sensitive permission)."
+        type: choice
+        options:
+          - completed
+          - draft
+        default: completed
   push:
     branches:
       - "main"
@@ -292,7 +300,8 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew :app:publishReleaseBundle --stacktrace --no-daemon
+          RELEASE_STATUS: ${{ inputs.release_status || 'completed' }}
+        run: ./gradlew :app:publishReleaseBundle --release-status "$RELEASE_STATUS" --stacktrace --no-daemon
 
       - name: Build signed release APK
         env:
